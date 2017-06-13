@@ -2,120 +2,28 @@ package reauth
 
 import (
 	"fmt"
-	"net/url"
+
+	"github.com/freman/caddy-reauth/backend"
+	_ "github.com/freman/caddy-reauth/backends"
 
 	"github.com/mholt/caddy"
-	"github.com/mholt/caddy/caddyhttp/httpserver"
 )
 
-// Auth represents configuration information for the middleware
-type Auth struct {
-	Rules []Rule
-	Next  httpserver.Handler
-	Realm string
-}
-
-// Rule represents the configuration for a site
 type Rule struct {
-	Path               string
-	ExceptedPaths      []string
-	Upstream           *url.URL
-	InsecureSkipVerify bool
+	path       string
+	exceptions []string
+	backends   []backend.Backend
 }
 
-func init() {
-	caddy.RegisterPlugin("reauth", caddy.Plugin{
-		ServerType: "http",
-		Action:     Setup,
-	})
-}
-
-// Setup is called by Caddy to parse the config block
-func Setup(c *caddy.Controller) error {
-	rules, err := parse(c)
-	if err != nil {
-		return err
-	}
-
-	c.OnStartup(func() error {
-		fmt.Println("Reauth middleware is initiated")
-		return nil
-	})
-
-	host := httpserver.GetConfig(c).Addr.Host
-
-	httpserver.GetConfig(c).AddMiddleware(func(next httpserver.Handler) httpserver.Handler {
-		return &Auth{
-			Rules: rules,
-			Next:  next,
-			Realm: host,
-		}
-	})
-
-	return nil
-}
-
-func parse(c *caddy.Controller) ([]Rule, error) {
-	// This parses the following  blocks
-	/*
-		reauth {
-			path /hello
-		}
-	*/
+func parseConfiguration(c *caddy.Controller) ([]Rule, error) {
 	var rules []Rule
 	for c.Next() {
 		args := c.RemainingArgs()
 		switch len(args) {
 		case 0:
-			// no argument passed, check the  block
-
-			var r = Rule{}
-			for c.NextBlock() {
-				switch c.Val() {
-				case "path":
-					if !c.NextArg() {
-						// we are expecting a value
-						return nil, c.ArgErr()
-					}
-					// return error if multiple paths in a block
-					if len(r.Path) != 0 {
-						return nil, c.ArgErr()
-					}
-					r.Path = c.Val()
-					if c.NextArg() {
-						// we are expecting only one value.
-						return nil, c.ArgErr()
-					}
-				case "except":
-					if !c.NextArg() {
-						return nil, c.ArgErr()
-					}
-					r.ExceptedPaths = append(r.ExceptedPaths, c.Val())
-					if c.NextArg() {
-						// except only allows one path per declaration
-						return nil, c.ArgErr()
-					}
-				case "upstream":
-					if !c.NextArg() {
-						// we are expecting a value
-						return nil, c.ArgErr()
-					}
-					// return error if multiple upstreams in a block
-					if r.Upstream != nil {
-						return nil, c.ArgErr()
-					}
-					var err error
-					r.Upstream, err = url.Parse(c.Val())
-					if err != nil {
-						return nil, c.ArgErr()
-					}
-					if c.NextArg() {
-						// we are expecting only one value.
-						return nil, c.ArgErr()
-					}
-				case "insecure":
-					r.InsecureSkipVerify = true
-				}
+			r, err := parseBlock(c)
+			if err != nil {
+				return nil, err
 			}
 			rules = append(rules, r)
 		default:
@@ -123,11 +31,66 @@ func parse(c *caddy.Controller) ([]Rule, error) {
 			return nil, c.ArgErr()
 		}
 	}
-	// check all rules at least have a path
-	for _, r := range rules {
-		if r.Path == "" {
-			return nil, fmt.Errorf("Each rule must have a path")
+	return rules, nil
+}
+
+func parseBlock(c *caddy.Controller) (Rule, error) {
+	r := Rule{backends: []backend.Backend{}}
+	for c.NextBlock() {
+		switch c.Val() {
+		case "path":
+			if !c.NextArg() {
+				// we are expecting a value
+				return r, c.ArgErr()
+			}
+			// return error if multiple paths in a block
+			if len(r.path) != 0 {
+				return r, c.ArgErr()
+			}
+			r.path = c.Val()
+			if c.NextArg() {
+				// we are expecting only one value.
+				return r, c.ArgErr()
+			}
+		case "except":
+			if !c.NextArg() {
+				return r, c.ArgErr()
+			}
+			r.exceptions = append(r.exceptions, c.Val())
+			if c.NextArg() {
+				// except only allows one path per declaration
+				return r, c.ArgErr()
+			}
+		default:
+			name := c.Val()
+			args := c.RemainingArgs()
+			if len(args) != 1 {
+				return r, fmt.Errorf("wrong number of arguments for %v: %v (%v:%v)", name, args, c.File(), c.Line())
+			}
+
+			config := args[0]
+
+			f, err := backend.Lookup(name)
+			if err != nil {
+				return r, fmt.Errorf("%v for %v (%v:%v)", err, name, c.File(), c.Line())
+			}
+
+			b, err := f(config)
+			if err != nil {
+				return r, fmt.Errorf("%v for %v (%v:%v)", err, name, c.File(), c.Line())
+			}
+
+			r.backends = append(r.backends, b)
 		}
 	}
-	return rules, nil
+
+	if r.path == "" {
+		return r, fmt.Errorf("path is a required parameter")
+	}
+
+	if len(r.backends) == 0 {
+		return r, fmt.Errorf("at least one backend required")
+	}
+
+	return r, nil
 }
