@@ -13,10 +13,24 @@ import (
 	"github.com/freman/caddy-reauth/backend"
 )
 
+// Backend name
 const Backend = "gitlab"
+
+// DefaultTimeout for sub requests
 const DefaultTimeout = time.Minute
+
+// DefaultUsername to use when talking to gitlab
 const DefaultUsername = "gitlab-ci-token"
 
+// Gitlab backend provides authentication against gitlab paths, primarily to make
+// it easier to dynamically authenticate the gitlab-ci against gitlab permitting
+// testing access to otherwise private resources without storing credentials in
+// gitlab or gitlab-ci.yml
+//
+// Authenticating against this backend should be done with the project path as
+// the username and the token as the password.
+//
+// Example: docker login docker.example.com -u "$CI_PROJECT_PATH" -p "$CI_BUILD_TOKEN"
 type Gitlab struct {
 	url                *url.URL
 	timeout            time.Duration
@@ -76,6 +90,11 @@ func constructor(config string) (backend.Backend, error) {
 	return us, nil
 }
 
+func noRedirectsPolicy(req *Request, via []*Request) error {
+	return errors.New("follow redirects disabled")
+}
+
+// Authenticate fulfils the backend interface
 func (h Gitlab) Authenticate(r *http.Request) (bool, error) {
 	un, pw, k := r.BasicAuth()
 	if !k {
@@ -92,7 +111,8 @@ func (h Gitlab) Authenticate(r *http.Request) (bool, error) {
 	}
 
 	c := &http.Client{
-		Timeout: h.timeout,
+		Timeout:       h.timeout,
+		CheckRedirect: noRedirectsPolicy,
 	}
 
 	if repo.Scheme == "https" && h.insecureSkipVerify {

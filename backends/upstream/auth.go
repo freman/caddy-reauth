@@ -12,13 +12,20 @@ import (
 	"github.com/freman/caddy-reauth/backend"
 )
 
+// Backend name
 const Backend = "upstream"
+
+// DefaultTimeout for sub requests
 const DefaultTimeout = time.Minute
 
+// Upstream backend provides authentication against an upstream http server.
+// If the upstream request returns a http 200 status code then the user
+// is considered logged in.
 type Upstream struct {
 	url                *url.URL
 	timeout            time.Duration
 	insecureSkipVerify bool
+	followRedirects    bool
 }
 
 func init() {
@@ -26,6 +33,10 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func noRedirectsPolicy(req *Request, via []*Request) error {
+	return errors.New("follow redirects disabled")
 }
 
 func constructor(config string) (backend.Backend, error) {
@@ -68,6 +79,7 @@ func constructor(config string) (backend.Backend, error) {
 	return us, nil
 }
 
+// Authenticate fulfils the backend interface
 func (h Upstream) Authenticate(r *http.Request) (bool, error) {
 	un, pw, k := r.BasicAuth()
 	if !k {
@@ -76,6 +88,10 @@ func (h Upstream) Authenticate(r *http.Request) (bool, error) {
 
 	c := &http.Client{
 		Timeout: h.timeout,
+	}
+
+	if !h.followRedirects {
+		c.CheckRedirect = noRedirectsPolicy
 	}
 
 	if h.url.Scheme == "https" && h.insecureSkipVerify {

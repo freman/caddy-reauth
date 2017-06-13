@@ -39,29 +39,29 @@ func parseBlock(c *caddy.Controller) (Rule, error) {
 	for c.NextBlock() {
 		switch c.Val() {
 		case "path":
+			// Path expects just one string argument and only one iteration
 			if !c.NextArg() {
-				// we are expecting a value
 				return r, c.ArgErr()
 			}
-			// return error if multiple paths in a block
 			if len(r.path) != 0 {
 				return r, c.ArgErr()
 			}
 			r.path = c.Val()
 			if c.NextArg() {
-				// we are expecting only one value.
 				return r, c.ArgErr()
 			}
 		case "except":
+			// Except can be specified multiple times with one string argument to
+			// provide exceptions
 			if !c.NextArg() {
 				return r, c.ArgErr()
 			}
 			r.exceptions = append(r.exceptions, c.Val())
 			if c.NextArg() {
-				// except only allows one path per declaration
 				return r, c.ArgErr()
 			}
 		default:
+			// Handle backends which should all have just one argument after the plugin name
 			name := c.Val()
 			args := c.RemainingArgs()
 			if len(args) != 1 {

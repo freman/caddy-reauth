@@ -7,6 +7,8 @@ import (
 	"github.com/mholt/caddy/caddyhttp/httpserver"
 )
 
+// Reauth is the main package structure containing all the goodies a good
+// structure needs to live a honest life
 type Reauth struct {
 	rules []Rule
 	next  httpserver.Handler
@@ -26,19 +28,20 @@ func setup(c *caddy.Controller) error {
 		return err
 	}
 
-	host := httpserver.GetConfig(c).Addr.Host
+	s := httpserver.GetConfig(c)
 
-	httpserver.GetConfig(c).AddMiddleware(func(next httpserver.Handler) httpserver.Handler {
+	s.AddMiddleware(func(next httpserver.Handler) httpserver.Handler {
 		return &Reauth{
 			rules: rules,
 			next:  next,
-			realm: host,
+			realm: s.Addr.Host,
 		}
 	})
 
 	return nil
 }
 
+// ServeHTTP implements the handler interface for Caddy's middleware
 func (h Reauth) ServeHTTP(w http.ResponseWriter, r *http.Request) (int, error) {
 RULE:
 	for _, p := range h.rules {
@@ -50,7 +53,6 @@ RULE:
 				continue RULE
 			}
 		}
-
 		for _, b := range p.backends {
 			ok, err := b.Authenticate(r)
 			if err != nil {
@@ -61,6 +63,8 @@ RULE:
 			}
 		}
 
+		// TODO: implement a basic method of utilising multiple authenticate headers
+		w.Header().Add("WWW-Authenticate", `Basic realm="`+h.realm+`"`)
 		return http.StatusUnauthorized, nil
 	}
 
