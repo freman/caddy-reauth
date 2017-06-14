@@ -35,7 +35,7 @@ func init() {
 	}
 }
 
-func noRedirectsPolicy(req *Request, via []*Request) error {
+func noRedirectsPolicy(req *http.Request, via []*http.Request) error {
 	return errors.New("follow redirects disabled")
 }
 
