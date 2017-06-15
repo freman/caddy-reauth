@@ -1,4 +1,4 @@
-package reauth
+package upstream
 
 import (
 	"crypto/tls"
@@ -74,6 +74,14 @@ func constructor(config string) (backend.Backend, error) {
 			return nil, fmt.Errorf("unable to parse insecure %s: %v", s, err)
 		}
 		us.insecureSkipVerify = b
+	}
+
+	if s, found := options["follow"]; found {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse follow %s: %v", s, err)
+		}
+		us.followRedirects = b
 	}
 
 	return us, nil
