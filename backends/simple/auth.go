@@ -1,4 +1,4 @@
-package reauth
+package simple
 
 import (
 	"net/http"

@@ -1,4 +1,4 @@
-package reauth
+package gitlabci
 
 import (
 	"crypto/tls"
@@ -14,7 +14,7 @@ import (
 )
 
 // Backend name
-const Backend = "gitlab"
+const Backend = "gitlabci"
 
 // DefaultTimeout for sub requests
 const DefaultTimeout = time.Minute
@@ -22,7 +22,7 @@ const DefaultTimeout = time.Minute
 // DefaultUsername to use when talking to gitlab
 const DefaultUsername = "gitlab-ci-token"
 
-// Gitlab backend provides authentication against gitlab paths, primarily to make
+// GitlabCI backend provides authentication against gitlab paths, primarily to make
 // it easier to dynamically authenticate the gitlab-ci against gitlab permitting
 // testing access to otherwise private resources without storing credentials in
 // gitlab or gitlab-ci.yml
@@ -31,7 +31,7 @@ const DefaultUsername = "gitlab-ci-token"
 // the username and the token as the password.
 //
 // Example: docker login docker.example.com -u "$CI_PROJECT_PATH" -p "$CI_BUILD_TOKEN"
-type Gitlab struct {
+type GitlabCI struct {
 	url                *url.URL
 	timeout            time.Duration
 	username           string
@@ -61,7 +61,7 @@ func constructor(config string) (backend.Backend, error) {
 		return nil, fmt.Errorf("unable to parse url %s: %v", s, err)
 	}
 
-	us := &Gitlab{
+	us := &GitlabCI{
 		url:      u,
 		username: DefaultUsername,
 		timeout:  DefaultTimeout,
@@ -95,7 +95,7 @@ func noRedirectsPolicy(req *http.Request, via []*http.Request) error {
 }
 
 // Authenticate fulfils the backend interface
-func (h Gitlab) Authenticate(r *http.Request) (bool, error) {
+func (h GitlabCI) Authenticate(r *http.Request) (bool, error) {
 	un, pw, k := r.BasicAuth()
 	if !k {
 		return false, nil
