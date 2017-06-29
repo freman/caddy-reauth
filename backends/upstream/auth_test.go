@@ -135,7 +135,7 @@ func TestAuthenticateRedirects(t *testing.T) {
 	if err == nil {
 		t.Error("Expected an error, didn't get one")
 	} else if err.Error() != "Get /auth: follow redirects disabled" {
-		t.Error("Unexpected error `%v`", err)
+		t.Errorf("Unexpected error `%v`", err)
 	}
 	if ok {
 		t.Error("Authenticate should not have succeeded")
@@ -145,7 +145,7 @@ func TestAuthenticateRedirects(t *testing.T) {
 
 	ok, err = us.Authenticate(r)
 	if err != nil {
-		t.Error("Unexpected error `%v`", err)
+		t.Errorf("Unexpected error `%v`", err)
 	}
 	if !ok {
 		t.Error("Authenticate should have succeeded")
