@@ -17,6 +17,14 @@ The following backends are supported.
 
 With more to come...
 
+## Supported failure handlers
+
+The following failure handlers are supported.
+
+* [HTTPBasic](#httpbasic)
+* [Redirect](#redirect)
+* [Status](#status)
+
 ## Configuration
 
 The core of the plugin supports the following arguments:
@@ -25,6 +33,7 @@ The core of the plugin supports the following arguments:
 | ------------------|---------------------------------------------------------------------------|
 | path              | the path to protect (required)                                            |
 | except            | sub path to permit unrestricted access to (optional, can be repeated)     |
+| failure           | what to do on failure (see failure handlers, default is [HTTPBasic](#httpbasic))        |
 
 Example:
 ```
@@ -60,6 +69,7 @@ Parameters for this backend:
 | skipverify        | true to ignore TLS errors (optional, false by default)                                   |
 | timeout           | request timeout (optional 1m by default, go duration syntax is supported)                |
 | follow            | follow redirects (disabled by default as redirecting to a login page might cause a 200)  |
+| cookies           | true to pass cookies to the upstream server                                              |
 
 Example
 ```
@@ -89,9 +99,54 @@ Example of logging in via gitlab-ci.yml
 	docker login docker.example.com -u "$CI_PROJECT_PATH" -p "$CI_BUILD_TOKEN"
 ```
 
+## Failure handlers
+
+### HTTPBasic
+
+This is the default failure handler and is by default configured to send the requested host as the realm
+
+Parameters for this handler:
+
+| Parameter-Name    | Description                                                                              |
+| ------------------|------------------------------------------------------------------------------------------|
+| realm             | name of the realm to authenticate against - defaults to host                             |
+
+Example
+```
+	failure httpbasic realm=example.org
+```
+
+### Redirect
+
+Redirect the user, perhaps to a login page?
+
+Parameters for this handler:
+
+| Parameter-Name    | Description                                                                              |
+| ------------------|------------------------------------------------------------------------------------------|
+| target            | target url for the redirection (required)                                                |
+| code              | the http status code to use, defaults to 302                                             |
+
+Example
+```
+	failure redirect target=example.org,code=303
+```
+
+### Status
+
+Simplest possible failure handler, return http status $code
+
+Parameters for this handler:
+
+| Parameter-Name    | Description                                                                              |
+| ------------------|------------------------------------------------------------------------------------------|
+| code              | the http status code to use, defaults to 401                                             |
+
+Example
+```
+	failure status code=418
+```
+
 ## Todo
 
-More generic method of passing of response headers...
-
-
-
+Modularise the failure handlers...
