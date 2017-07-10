@@ -68,9 +68,10 @@ func (h Reauth) ServeHTTP(w http.ResponseWriter, r *http.Request) (int, error) {
 RULE:
 	for _, p := range h.rules {
 		for _, pp := range p.path {
-			if !httpserver.Path(r.URL.Path).Matches(pp) {
-				continue RULE
+			if httpserver.Path(r.URL.Path).Matches(pp) {
+				break
 			}
+			continue RULE
 		}
 		for _, e := range p.exceptions {
 			if httpserver.Path(r.URL.Path).Matches(e) {
