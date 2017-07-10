@@ -35,6 +35,7 @@ type httpRedirectOnFailure struct {
 
 func (h *httpRedirectOnFailure) Handle(w http.ResponseWriter, r *http.Request) (int, error) {
 	w.Header().Add("Location", h.target.String())
+	http.Redirect(w, r, h.target.String(), h.code)
 	return h.code, nil
 }
 
