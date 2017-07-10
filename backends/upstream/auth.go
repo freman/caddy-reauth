@@ -50,6 +50,7 @@ type Upstream struct {
 	timeout            time.Duration
 	insecureSkipVerify bool
 	followRedirects    bool
+	passCookies        bool
 }
 
 func init() {
@@ -108,13 +109,21 @@ func constructor(config string) (backend.Backend, error) {
 		us.followRedirects = b
 	}
 
+	if s, found := options["cookies"]; found {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse cookies %s: %v", s, err)
+		}
+		us.passCookies = b
+	}
+
 	return us, nil
 }
 
 // Authenticate fulfils the backend interface
 func (h Upstream) Authenticate(r *http.Request) (bool, error) {
 	un, pw, k := r.BasicAuth()
-	if !k {
+	if !(k || h.passCookies) {
 		return false, nil
 	}
 
@@ -137,7 +146,15 @@ func (h Upstream) Authenticate(r *http.Request) (bool, error) {
 		return false, err
 	}
 
-	req.SetBasicAuth(un, pw)
+	if k {
+		req.SetBasicAuth(un, pw)
+	}
+
+	if h.passCookies {
+		for _, c := range r.Cookies() {
+			req.AddCookie(c)
+		}
+	}
 
 	resp, err := c.Do(req)
 	if err != nil {

@@ -36,7 +36,6 @@ import (
 type Reauth struct {
 	rules []Rule
 	next  httpserver.Handler
-	realm string
 }
 
 func init() {
@@ -58,7 +57,6 @@ func setup(c *caddy.Controller) error {
 		return &Reauth{
 			rules: rules,
 			next:  next,
-			realm: s.Addr.Host,
 		}
 	})
 
@@ -87,9 +85,7 @@ RULE:
 			}
 		}
 
-		// TODO: implement a basic method of utilising multiple authenticate headers
-		w.Header().Add("WWW-Authenticate", `Basic realm="`+h.realm+`"`)
-		return http.StatusUnauthorized, nil
+		return p.onfail.Handle(w, r)
 	}
 
 	return h.next.ServeHTTP(w, r)

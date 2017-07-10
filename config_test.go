@@ -2,6 +2,7 @@ package reauth
 
 import (
 	"errors"
+	"net/http"
 	"reflect"
 	"testing"
 
@@ -62,7 +63,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 		}, {
 			`Insufficient args for path`,
 			`reauth {
-				path 
+				path
 			}`,
 			nil,
 			errors.New(`Testfile:2 - Parse error: Wrong argument count or unexpected line ending after 'path'`),
@@ -84,12 +85,13 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				path:       "/test",
 				exceptions: nil,
 				backends:   testBackends,
+				onfail:     &httpBasicOnFailure{},
 			}},
 			nil,
 		}, {
 			`Insufficient args for except`,
 			`reauth {
-				except 
+				except
 			}`,
 			nil,
 			errors.New(`Testfile:2 - Parse error: Wrong argument count or unexpected line ending after 'except'`),
@@ -120,6 +122,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				path:       "/test",
 				exceptions: []string{"/test/thing"},
 				backends:   testBackends,
+				onfail:     &httpBasicOnFailure{},
 			}},
 			nil,
 		}, {
@@ -143,8 +146,90 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				path:       "/test",
 				exceptions: []string{"/test/thing", "/other/thing"},
 				backends:   testBackends,
+				onfail:     &httpBasicOnFailure{},
 			}},
 			nil,
+		}, {
+			`Failure requires arguments`,
+			`reauth {
+				path /test
+				failure
+				simple username=password
+			}`,
+			nil,
+			errors.New(`Testfile:3 - Parse error: Wrong argument count or unexpected line ending after 'failure'`),
+		}, {
+			`Status can be no arguments`,
+			`reauth {
+				path /test
+				failure status
+				simple username=password
+			}`,
+			[]Rule{{
+				path:     "/test",
+				backends: testBackends,
+				onfail:   &httpStatusOnFailure{code: http.StatusUnauthorized},
+			}},
+			nil,
+		}, {
+			`Status can be one arguments`,
+			`reauth {
+				path /test
+				failure status code=500
+				simple username=password
+			}`,
+			[]Rule{{
+				path:     "/test",
+				backends: testBackends,
+				onfail:   &httpStatusOnFailure{code: http.StatusInternalServerError},
+			}},
+			nil,
+		}, {
+			`Status can not be more than one arguments`,
+			`reauth {
+				path /test
+				failure status code=500 thing
+				simple username=password
+			}`,
+			nil,
+			errors.New(`Testfile:3 - Parse error: Wrong argument count or unexpected line ending after 'thing'`),
+		}, {
+			`Redirect requires 1 argument`,
+			`reauth {
+				path /test
+				failure redirect
+				simple username=password
+			}`,
+			nil,
+			errors.New(`Testfile:3 - Parse error: configuration required for failure redirect`),
+		}, {
+			`Redirect requires 1 argument`,
+			`reauth {
+				path /test
+				failure redirect code=300
+				simple username=password
+			}`,
+			nil,
+			errors.New(`Testfile:3 - Parse error: target url required for failure redirect`),
+		}, {
+			`What's a foo failure?`,
+			`reauth {
+				path /test
+				failure foo
+				simple username=password
+			}`,
+			nil,
+			errors.New(`Testfile:3 - Parse error: unknown failure handler foo: `),
+		}, {
+			`Only one failure please`,
+			`reauth {
+				path /test
+				failure status
+				failure status
+				simple username=password
+			}`,
+			nil,
+			errors.New(`Testfile:4 - Parse error: Wrong argument count or unexpected line ending after 'failure'`),
 		},
 	}
 

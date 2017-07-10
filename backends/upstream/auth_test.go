@@ -42,6 +42,18 @@ func redirectPasswordCheck(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func simpleCookieCheck(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("test")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if c == nil || c.Value != "trustme" {
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+}
+
 func TestAuthenticateSimple(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(simplePasswordCheck))
 	ssrv := httptest.NewTLSServer(http.HandlerFunc(simplePasswordCheck))
@@ -152,6 +164,50 @@ func TestAuthenticateRedirects(t *testing.T) {
 	}
 }
 
+func TestAuthenticateCookie(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(simpleCookieCheck))
+	defer srv.Close()
+
+	uri, _ := url.Parse(srv.URL)
+
+	us := Upstream{
+		url:         uri,
+		timeout:     DefaultTimeout,
+		passCookies: true,
+	}
+
+	t.Log("Testing no credentials")
+	r, _ := http.NewRequest("GET", "https://test.example.com", nil)
+	ok, err := us.Authenticate(r)
+	if err != nil {
+		t.Errorf("Unexpected error `%v`", err)
+	}
+	if ok {
+		t.Error("Authenticate should have failed")
+	}
+
+	t.Log("Testing wrong credentials")
+	r.AddCookie(&http.Cookie{Name: "test", Value: "trustnoone"})
+	ok, err = us.Authenticate(r)
+	if err != nil {
+		t.Errorf("Unexpected error `%v`", err)
+	}
+	if ok {
+		t.Error("Authenticate should have failed")
+	}
+
+	t.Log("Testing correct credentials")
+	r, _ = http.NewRequest("GET", "https://test.example.com", nil)
+	r.AddCookie(&http.Cookie{Name: "test", Value: "trustme"})
+	ok, err = us.Authenticate(r)
+	if err != nil {
+		t.Errorf("Unexpected error `%v`", err)
+	}
+	if !ok {
+		t.Error("Authenticate should have succeeded")
+	}
+}
+
 func TestAuthenticateConstructor(t *testing.T) {
 	tests := []struct {
 		desc   string
@@ -199,6 +255,16 @@ func TestAuthenticateConstructor(t *testing.T) {
 			`timeout=5s,insecure=true,follow=true`,
 			nil,
 			errors.New(`url is a required parameter`),
+		}, {
+			`With pass cookies`,
+			`url=http://google.com,cookies=true`,
+			&Upstream{url: &url.URL{Scheme: `http`, Host: `google.com`}, timeout: DefaultTimeout, passCookies: true},
+			nil,
+		}, {
+			`With invalid pass cookies`,
+			`url=http://google.com,cookies=yay`,
+			nil,
+			errors.New(`unable to parse cookies yay: strconv.ParseBool: parsing "yay": invalid syntax`),
 		},
 	}
 

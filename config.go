@@ -37,6 +37,7 @@ type Rule struct {
 	path       string
 	exceptions []string
 	backends   []backend.Backend
+	onfail     failure
 }
 
 func parseConfiguration(c *caddy.Controller) ([]Rule, error) {
@@ -84,6 +85,33 @@ func parseBlock(c *caddy.Controller) (Rule, error) {
 			if c.NextArg() {
 				return r, c.ArgErr()
 			}
+		case "failure":
+			if r.onfail != nil {
+				return r, c.ArgErr()
+			}
+			if !c.NextArg() {
+				return r, c.ArgErr()
+			}
+			name := c.Val()
+
+			args := ""
+			if c.NextArg() {
+				args = c.Val()
+			}
+
+			if c.NextArg() {
+				return r, c.ArgErr()
+			}
+
+			constructor, ok := failureHandlers[name]
+			if !ok {
+				return r, c.Errf("unknown failure handler %v: %v", name, args)
+			}
+			onfail, err := constructor(args)
+			if err != nil {
+				return r, c.Errf("%v for failure %v", err, name)
+			}
+			r.onfail = onfail
 		default:
 			// Handle backends which should all have just one argument after the plugin name
 			name := c.Val()
@@ -116,5 +144,8 @@ func parseBlock(c *caddy.Controller) (Rule, error) {
 		return r, fmt.Errorf("at least one backend required")
 	}
 
+	if r.onfail == nil {
+		r.onfail = &httpBasicOnFailure{}
+	}
 	return r, nil
 }

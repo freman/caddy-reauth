@@ -53,7 +53,6 @@ func TestMiddlewareProvider(t *testing.T) {
 	auth := &Reauth{
 		rules: rules,
 		next:  httpserver.HandlerFunc(emptyHandler),
-		realm: "test",
 	}
 
 	req, _ := http.NewRequest("GET", "/", nil)
