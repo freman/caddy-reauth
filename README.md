@@ -11,9 +11,9 @@ docker registry against gitlab-ci and avoid storing credentials in gitlab while 
 
 The following backends are supported.
 
-[Simple]#simple
-[Upstream]#upstream
-[GitlabCI]#gitlabci
+* [Simple](#simple)
+* [Upstream](#upstream)
+* [GitlabCI](#gitlabci)
 
 With more to come...
 
@@ -53,6 +53,7 @@ Example:
 Authentication against an upstream http server by performing a http basic authenticated request and checking the response for a http 200 OK status code. Anything other than a 200 OK status code will result in a failure to authenticate.
 
 Parameters for this backend:
+
 | Parameter-Name    | Description                                                                              |
 | ------------------|------------------------------------------------------------------------------------------|
 | url               | http/https url to call                                                                   |
@@ -70,6 +71,7 @@ Example
 Authenticate against Gitlab as the gitlab-ci-user for the purposes of letting the gitlab-ci access otherwise protected resources without storing credentials in gitlab or gitlab-ci.yml. Works basically like the [Upstream]#upstream backend except the username you provide is the project path
 
 Parameters for this backend:
+
 | Parameter-Name    | Description                                                                              |
 | ------------------|------------------------------------------------------------------------------------------|
 | url               | http/https url to call                                                                   |
