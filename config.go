@@ -34,7 +34,7 @@ import (
 )
 
 type Rule struct {
-	path       string
+	path       []string
 	exceptions []string
 	backends   []backend.Backend
 	onfail     failure
@@ -68,10 +68,7 @@ func parseBlock(c *caddy.Controller) (Rule, error) {
 			if !c.NextArg() {
 				return r, c.ArgErr()
 			}
-			if len(r.path) != 0 {
-				return r, c.ArgErr()
-			}
-			r.path = c.Val()
+			r.path = append(r.path, c.Val())
 			if c.NextArg() {
 				return r, c.ArgErr()
 			}
@@ -136,8 +133,8 @@ func parseBlock(c *caddy.Controller) (Rule, error) {
 		}
 	}
 
-	if r.path == "" {
-		return r, fmt.Errorf("path is a required parameter")
+	if len(r.path) == 0 {
+		return r, fmt.Errorf("at least one path is required")
 	}
 
 	if len(r.backends) == 0 {

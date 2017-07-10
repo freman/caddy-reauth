@@ -44,7 +44,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 			`reauth {
 			}`,
 			nil,
-			errors.New(`path is a required parameter`),
+			errors.New(`at least one path is required`),
 		}, {
 			`Too many args for path`,
 			`reauth {
@@ -53,13 +53,19 @@ func TestCaddyReauthConfigs(t *testing.T) {
 			nil,
 			errors.New(`Testfile:2 - Parse error: Wrong argument count or unexpected line ending after '/test2'`),
 		}, {
-			`Too many copies of path`,
+			`Two or more paths is ok`,
 			`reauth {
 				path /test
-				path /test
+				path /test2
+				simple username=password
 			}`,
+			[]Rule{{
+				path:       []string{"/test", "/test2"},
+				exceptions: nil,
+				backends:   testBackends,
+				onfail:     &httpBasicOnFailure{},
+			}},
 			nil,
-			errors.New(`Testfile:3 - Parse error: Wrong argument count or unexpected line ending after '/test'`),
 		}, {
 			`Insufficient args for path`,
 			`reauth {
@@ -82,7 +88,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			[]Rule{{
-				path:       "/test",
+				path:       []string{"/test"},
 				exceptions: nil,
 				backends:   testBackends,
 				onfail:     &httpBasicOnFailure{},
@@ -119,7 +125,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			[]Rule{{
-				path:       "/test",
+				path:       []string{"/test"},
 				exceptions: []string{"/test/thing"},
 				backends:   testBackends,
 				onfail:     &httpBasicOnFailure{},
@@ -143,7 +149,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			[]Rule{{
-				path:       "/test",
+				path:       []string{"/test"},
 				exceptions: []string{"/test/thing", "/other/thing"},
 				backends:   testBackends,
 				onfail:     &httpBasicOnFailure{},
@@ -166,7 +172,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			[]Rule{{
-				path:     "/test",
+				path:     []string{"/test"},
 				backends: testBackends,
 				onfail:   &httpStatusOnFailure{code: http.StatusUnauthorized},
 			}},
@@ -179,7 +185,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			[]Rule{{
-				path:     "/test",
+				path:     []string{"/test"},
 				backends: testBackends,
 				onfail:   &httpStatusOnFailure{code: http.StatusInternalServerError},
 			}},

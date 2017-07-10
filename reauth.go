@@ -67,8 +67,10 @@ func setup(c *caddy.Controller) error {
 func (h Reauth) ServeHTTP(w http.ResponseWriter, r *http.Request) (int, error) {
 RULE:
 	for _, p := range h.rules {
-		if !httpserver.Path(r.URL.Path).Matches(p.path) {
-			continue
+		for _, pp := range p.path {
+			if !httpserver.Path(r.URL.Path).Matches(pp) {
+				continue RULE
+			}
 		}
 		for _, e := range p.exceptions {
 			if httpserver.Path(r.URL.Path).Matches(e) {

@@ -29,11 +29,11 @@ The following failure handlers are supported.
 
 The core of the plugin supports the following arguments:
 
-| Parameter-Name    | Description                                                               |
-| ------------------|---------------------------------------------------------------------------|
-| path              | the path to protect (required)                                            |
-| except            | sub path to permit unrestricted access to (optional, can be repeated)     |
-| failure           | what to do on failure (see failure handlers, default is [HTTPBasic](#httpbasic))        |
+| Parameter-Name    | Description                                                                                        |
+| ------------------|----------------------------------------------------------------------------------------------------|
+| path              | the path to protect, may be repeated but be aware of strange interactions with `except` (required) |
+| except            | sub path to permit unrestricted access to (optional, can be repeated)                              |
+| failure           | what to do on failure (see failure handlers, default is [HTTPBasic](#httpbasic))                   |
 
 Example:
 ```
