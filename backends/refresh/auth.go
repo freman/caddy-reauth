@@ -22,18 +22,22 @@
  * SOFTWARE.
  */
 
-package upstream
+package refresh
 
 import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/freman/caddy-reauth/backend"
+
+	"github.com/nicolasazrak/caddy-cache"
+	"github.com/nicolasazrak/caddy-cache/storage"
 )
 
 // Backend name
@@ -46,6 +50,8 @@ const DefaultTimeout = time.Minute
 // If the upstream request returns a http 200 status code then the user
 // is considered logged in.
 type Upstream struct {
+	config             *cache.Config
+	refreshCache       *cache.HTTPCache
 	url                *url.URL
 	timeout            time.Duration
 	insecureSkipVerify bool
@@ -81,8 +87,10 @@ func constructor(config string) (backend.Backend, error) {
 	}
 
 	us := &Upstream{
-		url:     u,
-		timeout: DefaultTimeout,
+		url:          u,
+		timeout:      DefaultTimeout,
+		refreshCache: cache.NewHTTPCache(),
+		config:       &cache.Config{Path: "tmp"},
 	}
 
 	if s, found := options["timeout"]; found {
@@ -120,13 +128,42 @@ func constructor(config string) (backend.Backend, error) {
 	return us, nil
 }
 
+func (h *Upstream) fetchUpstream(req *http.Request, c *http.Client) (*cache.HTTPCacheEntry, []byte, error) {
+	response := cache.NewResponse()
+
+	if resp, err := c.Do(req); err != nil {
+		fmt.Println(err.Error())
+		return nil, nil, err
+
+	} else {
+		if resp.StatusCode != 200 {
+			return nil, nil, nil
+		}
+
+		if body, err := ioutil.ReadAll(resp.Body); err != nil {
+			fmt.Println(err.Error())
+			return nil, nil, err
+
+		} else {
+
+			response.Header().Set("Cache-Control", "public,max-age=7200")
+			response.WriteHeader(resp.StatusCode)
+			return cache.NewHTTPCacheEntry(GetKey(req), req, response, h.config), body, nil
+		}
+	}
+}
+
+func GetKey(r *http.Request) string {
+	key := fmt.Sprintf("%s %s%s", r.Method, r.Host, r.URL.Path)
+	q := r.URL.Query().Encode()
+	if len(q) > 0 {
+		key += "?" + q
+	}
+	return key
+}
+
 // Authenticate fulfils the backend interface
 func (h Upstream) Authenticate(r *http.Request) (bool, error) {
-	un, pw, k := r.BasicAuth()
-	if !(k || h.passCookies) {
-		return false, nil
-	}
-
 	c := &http.Client{
 		Timeout: h.timeout,
 	}
@@ -141,30 +178,41 @@ func (h Upstream) Authenticate(r *http.Request) (bool, error) {
 		}
 	}
 
-	req, err := http.NewRequest("GET", h.url.String(), nil)
-	if err != nil {
+	if req, err := http.NewRequest("GET", h.url.String(), nil); err != nil {
+		fmt.Println(err.Error())
 		return false, err
-	}
 
-	if k {
-		req.SetBasicAuth(un, pw)
-	}
+	} else {
+		req.Header.Add("Authorization", r.Header.Get("Authorization"))
 
-	if h.passCookies {
-		for _, c := range r.Cookies() {
-			req.AddCookie(c)
+		if h.passCookies {
+			for _, c := range r.Cookies() {
+				req.AddCookie(c)
+			}
+		}
+
+		if _, exists := h.refreshCache.Get(req); exists {
+			return true, nil
+		}
+
+		if entry, body, err := h.fetchUpstream(req, c); err != nil {
+			fmt.Println(err.Error())
+			return false, err
+
+		} else {
+			// if err := entry.SetStorage(h.config); err != nil {
+			if fileStore, err := storage.NewFileStorage(h.config.Path); err != nil {
+				fmt.Println(err.Error())
+				return false, err
+			} else {
+				entry.Response.SetBody(fileStore)
+			}
+
+			entry.Response.Write(body)
+			h.refreshCache.Put(req, entry)
+			return true, nil
 		}
 	}
 
-	resp, err := c.Do(req)
-	if err != nil {
-		return false, err
-	}
-
-	if resp.StatusCode != 200 {
-		return false, nil
-	}
-
 	return true, nil
-
 }
