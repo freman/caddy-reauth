@@ -1,4 +1,4 @@
-package upstream
+package refresh
 
 import (
 	"crypto/x509"
