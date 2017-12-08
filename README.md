@@ -13,6 +13,7 @@ The following backends are supported.
 
 * [Simple](#simple)
 * [Upstream](#upstream)
+* [Refresh](#refresh)
 * [GitlabCI](#gitlabci)
 * [LDAP](#ldap)
 
@@ -75,6 +76,27 @@ Parameters for this backend:
 Example
 ```
 	upstream url=https://google.com,skipverify=true,timeout=5s
+```
+
+### Refresh
+
+Authentication against a refresh token http server by performing an authorization bearer token request and checking the response for a http 200 OK status code. Anything other than a 200 OK status code will result in a failure to authenticate.
+
+Parameters for this backend:
+
+| Parameter-Name    | Description                                                                              |
+| ------------------|------------------------------------------------------------------------------------------|
+| url               | http/https url to call                                                                   |
+| skipverify        | true to ignore TLS errors (optional, false by default)                                   |
+| timeout           | request timeout (optional 1m by default, go duration syntax is supported)                |
+| follow            | follow redirects (disabled by default as redirecting to a login page might cause a 200)  |
+| cookies           | true to pass cookies to the upstream server                                              |
+| cache_path        | path to directory where cache files will be stored                                       |
+| lock_timeout      | timout for cache file lock (5min default)                                                |
+
+Example
+```
+	refresh url=https://google.com,skipverify=true,timeout=5s,cache_path=tmp,lock_timeout=300
 ```
 
 ### GitlabCI
