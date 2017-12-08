@@ -27,6 +27,7 @@ package backends
 import (
 	_ "github.com/freman/caddy-reauth/backends/gitlabci"
 	_ "github.com/freman/caddy-reauth/backends/ldap"
+	_ "github.com/freman/caddy-reauth/backends/refresh"
 	_ "github.com/freman/caddy-reauth/backends/simple"
 	_ "github.com/freman/caddy-reauth/backends/upstream"
 )
