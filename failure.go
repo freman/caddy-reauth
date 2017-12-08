@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/freman/caddy-reauth/backend"
+	"github.com/fellou89/caddy-reauth/backend"
 )
 
 type failure interface {

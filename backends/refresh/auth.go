@@ -34,7 +34,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/freman/caddy-reauth/backend"
+	"github.com/fellou89/caddy-reauth/backend"
 
 	"github.com/nicolasazrak/caddy-cache"
 	"github.com/nicolasazrak/caddy-cache/storage"
