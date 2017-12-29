@@ -3,6 +3,7 @@ package refresh
 import (
 	"crypto/x509"
 	"errors"
+	"github.com/nicolasazrak/caddy-cache"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -64,17 +65,22 @@ func TestAuthenticateSimple(t *testing.T) {
 
 	ssrv.Config.ErrorLog = log.New(ioutil.Discard, "", 0) // ಠ_ಠ
 
-	uri, _ := url.Parse(srv.URL)
-	suri, _ := url.Parse(ssrv.URL)
+	sref, _ := http.NewRequest("GET", ssrv.URL, nil)
+	ref, _ := http.NewRequest("GET", srv.URL, nil)
 
-	us := Upstream{
-		url:     uri,
+	rf := Refresh{
+		refreshRequest: ref,
+		refreshCache:   cache.NewHTTPCache(),
+		cacheConfig: &cache.Config{
+			Path:        "tmp",
+			LockTimeout: time.Duration(5) * time.Minute,
+		},
 		timeout: DefaultTimeout,
 	}
 
 	t.Log("Testing no credentials")
 	r, _ := http.NewRequest("GET", "https://test.example.com", nil)
-	ok, err := us.Authenticate(r)
+	ok, err := rf.Authenticate(r)
 	if err != nil {
 		t.Errorf("Unexpected error `%v`", err)
 	}
@@ -84,7 +90,7 @@ func TestAuthenticateSimple(t *testing.T) {
 
 	t.Log("Testing wrong credentials")
 	r.SetBasicAuth("fred", "blogs")
-	ok, err = us.Authenticate(r)
+	ok, err = rf.Authenticate(r)
 	if err != nil {
 		t.Errorf("Unexpected error `%v`", err)
 	}
@@ -94,7 +100,7 @@ func TestAuthenticateSimple(t *testing.T) {
 
 	t.Log("Testing correct credentials")
 	r.SetBasicAuth("bob-bcrypt", "secret")
-	ok, err = us.Authenticate(r)
+	ok, err = rf.Authenticate(r)
 	if err != nil {
 		t.Errorf("Unexpected error `%v`", err)
 	}
@@ -103,8 +109,8 @@ func TestAuthenticateSimple(t *testing.T) {
 	}
 
 	t.Log("Testing over https with bad cert")
-	us.url = suri
-	ok, err = us.Authenticate(r)
+	rf.refreshRequest = sref
+	ok, err = rf.Authenticate(r)
 	if err == nil {
 		t.Errorf("Expected an error, didn't get one")
 	} else {
@@ -120,8 +126,8 @@ func TestAuthenticateSimple(t *testing.T) {
 	}
 
 	t.Log("Testing over https with skipverify")
-	us.insecureSkipVerify = true
-	ok, err = us.Authenticate(r)
+	rf.insecureSkipVerify = true
+	ok, err = rf.Authenticate(r)
 	if err != nil {
 		t.Errorf("Unexpected error `%v`", err)
 	}
@@ -133,17 +139,22 @@ func TestAuthenticateSimple(t *testing.T) {
 
 func TestAuthenticateRedirects(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(redirectPasswordCheck))
-	uri, _ := url.Parse(srv.URL)
+	ref, _ := http.NewRequest("GET", srv.URL, nil)
 
-	us := Upstream{
-		url:     uri,
+	rf := Refresh{
+		refreshRequest: ref,
+		refreshCache:   cache.NewHTTPCache(),
+		cacheConfig: &cache.Config{
+			Path:        "tmp",
+			LockTimeout: time.Duration(5) * time.Minute,
+		},
 		timeout: DefaultTimeout,
 	}
 
 	r, _ := http.NewRequest("GET", "https://test.example.com", nil)
 	r.SetBasicAuth("bob-bcrypt", "secret")
 
-	ok, err := us.Authenticate(r)
+	ok, err := rf.Authenticate(r)
 	if err == nil {
 		t.Error("Expected an error, didn't get one")
 	} else if err.Error() != "Get /auth: follow redirects disabled" {
@@ -153,9 +164,9 @@ func TestAuthenticateRedirects(t *testing.T) {
 		t.Error("Authenticate should not have succeeded")
 	}
 
-	us.followRedirects = true
+	rf.followRedirects = true
 
-	ok, err = us.Authenticate(r)
+	ok, err = rf.Authenticate(r)
 	if err != nil {
 		t.Errorf("Unexpected error `%v`", err)
 	}
@@ -167,18 +178,22 @@ func TestAuthenticateRedirects(t *testing.T) {
 func TestAuthenticateCookie(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(simpleCookieCheck))
 	defer srv.Close()
+	ref, _ := http.NewRequest("GET", srv.URL, nil)
 
-	uri, _ := url.Parse(srv.URL)
-
-	us := Upstream{
-		url:         uri,
+	rf := Refresh{
+		refreshRequest: ref,
+		refreshCache:   cache.NewHTTPCache(),
+		cacheConfig: &cache.Config{
+			Path:        "tmp",
+			LockTimeout: time.Duration(5) * time.Minute,
+		},
 		timeout:     DefaultTimeout,
 		passCookies: true,
 	}
 
 	t.Log("Testing no credentials")
 	r, _ := http.NewRequest("GET", "https://test.example.com", nil)
-	ok, err := us.Authenticate(r)
+	ok, err := rf.Authenticate(r)
 	if err != nil {
 		t.Errorf("Unexpected error `%v`", err)
 	}
@@ -188,7 +203,7 @@ func TestAuthenticateCookie(t *testing.T) {
 
 	t.Log("Testing wrong credentials")
 	r.AddCookie(&http.Cookie{Name: "test", Value: "trustnoone"})
-	ok, err = us.Authenticate(r)
+	ok, err = rf.Authenticate(r)
 	if err != nil {
 		t.Errorf("Unexpected error `%v`", err)
 	}
@@ -199,7 +214,7 @@ func TestAuthenticateCookie(t *testing.T) {
 	t.Log("Testing correct credentials")
 	r, _ = http.NewRequest("GET", "https://test.example.com", nil)
 	r.AddCookie(&http.Cookie{Name: "test", Value: "trustme"})
-	ok, err = us.Authenticate(r)
+	ok, err = rf.Authenticate(r)
 	if err != nil {
 		t.Errorf("Unexpected error `%v`", err)
 	}
@@ -209,10 +224,12 @@ func TestAuthenticateCookie(t *testing.T) {
 }
 
 func TestAuthenticateConstructor(t *testing.T) {
+	ref, _ := http.NewRequest("GET", "http://google.com", nil)
+
 	tests := []struct {
 		desc   string
 		config string
-		expect *Upstream
+		expect *Refresh
 		err    error
 	}{
 		{
@@ -223,7 +240,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 		}, {
 			`URL only configuration`,
 			`url=http://google.com`,
-			&Upstream{url: &url.URL{Scheme: `http`, Host: `google.com`}, timeout: DefaultTimeout},
+			&Refresh{refreshRequest: ref, timeout: DefaultTimeout},
 			nil,
 		}, {
 			`Invalid url configuration`,
@@ -233,7 +250,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 		}, {
 			`With valid arguments`,
 			`url=http://google.com,timeout=5s,insecure=true,follow=true`,
-			&Upstream{url: &url.URL{Scheme: `http`, Host: `google.com`}, timeout: 5 * time.Second, insecureSkipVerify: true, followRedirects: true},
+			&Refresh{refreshRequest: ref, timeout: 5 * time.Second, insecureSkipVerify: true, followRedirects: true},
 			nil,
 		}, {
 			`With invalid timeout`,
@@ -258,7 +275,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 		}, {
 			`With pass cookies`,
 			`url=http://google.com,cookies=true`,
-			&Upstream{url: &url.URL{Scheme: `http`, Host: `google.com`}, timeout: DefaultTimeout, passCookies: true},
+			&Refresh{refreshRequest: ref, timeout: DefaultTimeout, passCookies: true},
 			nil,
 		}, {
 			`With invalid pass cookies`,
@@ -286,7 +303,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 				t.Errorf("Expected nil rules, got %v", be)
 			}
 		} else {
-			actual, ok := be.(*Upstream)
+			actual, ok := be.(*Refresh)
 			if !ok {
 				t.Errorf("Expected *Upstream, got %T", be)
 			} else if !reflect.DeepEqual(tc.expect, actual) {
