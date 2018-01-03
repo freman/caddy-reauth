@@ -108,6 +108,7 @@ func TestAuthenticateSimple(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected an error, didn't get one")
 	} else {
+		t.Errorf("---error: %s", err)
 		uerr, ok := err.(*url.Error)
 		if !ok {
 			t.Errorf("Unexpected error `%v`", err)

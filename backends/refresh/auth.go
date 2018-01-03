@@ -46,14 +46,13 @@ const Backend = "refresh"
 // DefaultTimeout for sub requests
 const DefaultTimeout = time.Minute
 
-// Upstream backend provides authentication against an upstream http server.
-// If the upstream request returns a http 200 status code then the user
+// Refresh backend provides authentication against a refresh token endpoint.
+// If the refresh request returns a http 200 status code then the user
 // is considered logged in.
-type Upstream struct {
+type Refresh struct {
+	refreshRequest     *http.Request
 	cacheConfig        *cache.Config
 	refreshCache       *cache.HTTPCache
-	refreshRequest     *http.Request
-	requestKey         string
 	timeout            time.Duration
 	insecureSkipVerify bool
 	followRedirects    bool
@@ -92,28 +91,54 @@ func constructor(config string) (backend.Backend, error) {
 		return nil, errors.Wrap(err, "Error forming refresh token request")
 	}
 
-	us := &Upstream{
+	rf := &Refresh{
 		refreshRequest: req,
-		requestKey:     GetKey(req),
 		refreshCache:   cache.NewHTTPCache(),
 		cacheConfig: &cache.Config{
 			Path:        "tmp",
 			LockTimeout: time.Duration(5) * time.Minute,
 		},
-		timeout: DefaultTimeout,
 	}
 
-	us.timeout = parseDurationOption(options, "timeout")
-	us.insecureSkipVerify = parseBoolOption(options, "insecure")
-	us.followRedirects = parseBoolOption(options, "follow")
-	us.passCookies = parseBoolOption(options, "cookies")
+	val, err := parseDurationOption(options, "timeout")
+	if err != nil {
+		return nil, err
+	} else {
+		rf.timeout = val
+	}
+
+	bval, err := parseBoolOption(options, "skipverify")
+	if err != nil {
+		return nil, err
+	} else {
+		rf.insecureSkipVerify = bval
+	}
+
+	bval, err = parseBoolOption(options, "follow")
+	if err != nil {
+		return nil, err
+	} else {
+		rf.followRedirects = bval
+	}
+
+	bval, err = parseBoolOption(options, "cookies")
+	if err != nil {
+		return nil, err
+	} else {
+		rf.passCookies = bval
+	}
 
 	// Cache config
 	if s, found := options["cache_path"]; found {
-		us.cacheConfig.Path = s
+		rf.cacheConfig.Path = s
 	}
 
-	us.cacheConfig.LockTimeout = parseDurationOption(options, "lock_timeout")
+	val, err = parseDurationOption(options, "lock_timeout")
+	if err != nil {
+		return nil, err
+	} else {
+		rf.cacheConfig.LockTimeout = val
+	}
 
 	// Can't really define cache rules in one line, it would require refactor of parsing configs
 	// so for now these two Config params stay out, and since cacheRules will be nil,
@@ -122,9 +147,9 @@ func constructor(config string) (backend.Backend, error) {
 	// DefaultMaxAge: time.Duration(5) * time.Minute,
 	// CacheRules:    []cache.CacheRule{},
 	//
-	// us.cacheConfig.DefaultMaxAge = parseDurationOption(options, "max_age")
+	// rf.cacheConfig.DefaultMaxAge = parseDurationOption(options, "max_age")
 
-	return us, nil
+	return rf, nil
 }
 
 func GetKey(r *http.Request) string {
@@ -136,53 +161,57 @@ func GetKey(r *http.Request) string {
 	return key
 }
 
-func parseBoolOption(options map[string]string, key string) bool {
+func parseBoolOption(options map[string]string, key string) (bool, error) {
 	if s, found := options[key]; found {
 		if b, err := strconv.ParseBool(s); err != nil {
-			fmt.Errorf("unable to parse %s %s: %v", key, s, err)
+			return false, errors.Wrap(err, fmt.Sprintf("unable to parse %s %s", key, s))
 		} else {
-			return b
+			return b, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
-func parseDurationOption(options map[string]string, key string) time.Duration {
+func parseDurationOption(options map[string]string, key string) (time.Duration, error) {
 	if s, found := options[key]; found {
 		if d, err := time.ParseDuration(s); err != nil {
-			fmt.Errorf("unable to parse %s %s: %v", key, s, err)
+			return time.Duration(0), errors.Wrap(err, fmt.Sprintf("unable to parse %s %s", key, s))
 		} else {
-			return d
+			return d, nil
 		}
 	}
-	return time.Duration(0)
+	return DefaultTimeout, nil
 }
 
-func (h *Upstream) fetchUpstream(c *http.Client) (*cache.HTTPCacheEntry, []byte, error) {
+func (h *Refresh) fetchRefresh(c *http.Client, r *http.Request) (*cache.HTTPCacheEntry, []byte, error) {
 	response := cache.NewResponse()
 
 	if resp, err := c.Do(h.refreshRequest); err != nil {
-		return nil, nil, errors.Wrap(err, "Error executing refresh token request")
+		return nil, nil, err
 
 	} else {
 		if resp.StatusCode != 200 {
-			return nil, nil, nil
+			fmt.Println(resp.StatusCode)
+			return nil, nil, errors.New("Response from refresh request was not 200")
 		}
 
 		if body, err := ioutil.ReadAll(resp.Body); err != nil {
 			return nil, nil, errors.Wrap(err, "Error reading response body")
 
 		} else {
-
 			response.Header().Set("Cache-Control", "public,max-age=7200")
 			response.WriteHeader(resp.StatusCode)
-			return cache.NewHTTPCacheEntry(h.requestKey, h.refreshRequest, response, h.cacheConfig), body, nil
+			return cache.NewHTTPCacheEntry(GetKey(r), r, response, h.cacheConfig), body, nil
 		}
 	}
 }
 
 // Authenticate fulfils the backend interface
-func (h Upstream) Authenticate(r *http.Request) (bool, error) {
+func (h Refresh) Authenticate(r *http.Request) (bool, error) {
+	if r.Header.Get("Authorization") == "" {
+		return false, nil
+	}
+
 	c := &http.Client{
 		Timeout: h.timeout,
 	}
@@ -205,11 +234,11 @@ func (h Upstream) Authenticate(r *http.Request) (bool, error) {
 		}
 	}
 
-	if _, exists := h.refreshCache.Get(h.refreshRequest); exists {
+	if _, exists := h.refreshCache.Get(r); exists {
 		return true, nil
 	}
 
-	if entry, body, err := h.fetchUpstream(c); err != nil {
+	if entry, body, err := h.fetchRefresh(c, r); err != nil {
 		return false, err
 
 	} else {
@@ -221,7 +250,7 @@ func (h Upstream) Authenticate(r *http.Request) (bool, error) {
 		}
 
 		entry.Response.Write(body)
-		h.refreshCache.Put(h.refreshRequest, entry)
+		h.refreshCache.Put(r, entry)
 		return true, nil
 	}
 

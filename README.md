@@ -91,7 +91,7 @@ Parameters for this backend:
 | timeout           | request timeout (optional 1m by default, go duration syntax is supported)                |
 | follow            | follow redirects (disabled by default as redirecting to a login page might cause a 200)  |
 | cookies           | true to pass cookies to the upstream server                                              |
-| cache_path        | path to directory where cache files will be stored                                       |
+| cache_path        | path to existing project directory where cache files will be stored                      |
 | lock_timeout      | timout for cache file lock (5min default)                                                |
 
 Example
