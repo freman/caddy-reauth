@@ -183,10 +183,10 @@ func parseDurationOption(options map[string]string, key string) (time.Duration, 
 	return DefaultTimeout, nil
 }
 
-func (h *Refresh) fetchRefresh(c *http.Client, r *http.Request) (*cache.HTTPCacheEntry, []byte, error) {
+func fetchRefresh(c *http.Client, r *http.Request, refreshRequest *http.Request, cacheConfig *cache.Config) (*cache.HTTPCacheEntry, []byte, error) {
 	response := cache.NewResponse()
 
-	if resp, err := c.Do(h.refreshRequest); err != nil {
+	if resp, err := c.Do(refreshRequest); err != nil {
 		return nil, nil, err
 
 	} else {
@@ -201,7 +201,7 @@ func (h *Refresh) fetchRefresh(c *http.Client, r *http.Request) (*cache.HTTPCach
 		} else {
 			response.Header().Set("Cache-Control", "public,max-age=7200")
 			response.WriteHeader(resp.StatusCode)
-			return cache.NewHTTPCacheEntry(GetKey(r), r, response, h.cacheConfig), body, nil
+			return cache.NewHTTPCacheEntry(GetKey(r), r, response, cacheConfig), body, nil
 		}
 	}
 }
@@ -226,7 +226,7 @@ func (h Refresh) Authenticate(r *http.Request) (bool, error) {
 		}
 	}
 
-	h.refreshRequest.Header.Add("Authorization", r.Header.Get("Authorization"))
+	h.refreshRequest.Header.Set("Authorization", r.Header.Get("Authorization"))
 
 	if h.passCookies {
 		for _, c := range r.Cookies() {
@@ -238,7 +238,7 @@ func (h Refresh) Authenticate(r *http.Request) (bool, error) {
 		return true, nil
 	}
 
-	if entry, body, err := h.fetchRefresh(c, r); err != nil {
+	if entry, body, err := fetchRefresh(c, r, h.refreshRequest, h.cacheConfig); err != nil {
 		return false, err
 
 	} else {
