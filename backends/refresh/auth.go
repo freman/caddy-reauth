@@ -32,12 +32,12 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/fellou89/caddy-cache"
+	"github.com/fellou89/caddy-cache/storage"
 	"github.com/fellou89/caddy-reauth/backend"
-
-	"github.com/nicolasazrak/caddy-cache"
-	"github.com/nicolasazrak/caddy-cache/storage"
 )
 
 // Backend name
@@ -152,15 +152,6 @@ func constructor(config string) (backend.Backend, error) {
 	return rf, nil
 }
 
-func GetKey(r *http.Request) string {
-	key := fmt.Sprintf("%s %s%s", r.Method, r.Host, r.URL.Path)
-	q := r.URL.Query().Encode()
-	if len(q) > 0 {
-		key += "?" + q
-	}
-	return key
-}
-
 func parseBoolOption(options map[string]string, key string) (bool, error) {
 	if s, found := options[key]; found {
 		if b, err := strconv.ParseBool(s); err != nil {
@@ -183,15 +174,14 @@ func parseDurationOption(options map[string]string, key string) (time.Duration, 
 	return DefaultTimeout, nil
 }
 
-func fetchRefresh(c *http.Client, r *http.Request, refreshRequest *http.Request, cacheConfig *cache.Config) (*cache.HTTPCacheEntry, []byte, error) {
+func fetchRefresh(client *http.Client, key string, req *http.Request, refreshRequest *http.Request, cacheConfig *cache.Config) (*cache.HTTPCacheEntry, []byte, error) {
 	response := cache.NewResponse()
 
-	if resp, err := c.Do(refreshRequest); err != nil {
+	if resp, err := client.Do(refreshRequest); err != nil {
 		return nil, nil, err
 
 	} else {
 		if resp.StatusCode != 200 {
-			fmt.Println(resp.StatusCode)
 			return nil, nil, errors.New("Response from refresh request was not 200")
 		}
 
@@ -199,9 +189,12 @@ func fetchRefresh(c *http.Client, r *http.Request, refreshRequest *http.Request,
 			return nil, nil, errors.Wrap(err, "Error reading response body")
 
 		} else {
-			response.Header().Set("Cache-Control", "public,max-age=7200")
+			// This creates cache files that can only live for 3 hours,
+			// implementing token expiry without having to parse jwt token
+			response.Header().Set("Cache-Control", "public,max-age=10800")
 			response.WriteHeader(resp.StatusCode)
-			return cache.NewHTTPCacheEntry(GetKey(r), r, response, cacheConfig), body, nil
+
+			return cache.NewHTTPCacheEntry(key, req, response, cacheConfig), body, nil
 		}
 	}
 }
@@ -209,8 +202,9 @@ func fetchRefresh(c *http.Client, r *http.Request, refreshRequest *http.Request,
 // Authenticate fulfils the backend interface
 func (h Refresh) Authenticate(r *http.Request) (bool, error) {
 	if r.Header.Get("Authorization") == "" {
-		return false, nil
+		return false, errors.New("Missing Authorization Header")
 	}
+	jwtToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
 
 	c := &http.Client{
 		Timeout: h.timeout,
@@ -234,21 +228,27 @@ func (h Refresh) Authenticate(r *http.Request) (bool, error) {
 		}
 	}
 
-	if _, exists := h.refreshCache.Get(r); exists {
+	if _, freshness := h.refreshCache.GetFreshness(r, jwtToken); freshness == 0 {
+		// get value stored in cache to pass on context
 		return true, nil
+
+	} else if freshness == 2 {
+		return false, nil
 	}
 
-	if entry, body, err := fetchRefresh(c, r, h.refreshRequest, h.cacheConfig); err != nil {
+	if entry, body, err := fetchRefresh(c, jwtToken, r, h.refreshRequest, h.cacheConfig); err != nil {
 		return false, err
 
 	} else {
 		if fileStore, err := storage.NewFileStorage(h.cacheConfig.Path); err != nil {
+			fmt.Println(err)
 			return false, errors.Wrap(err, "Error setting up file storage for cache")
 
 		} else {
 			entry.Response.SetBody(fileStore)
 		}
 
+		// pass value to be cached on to context
 		entry.Response.Write(body)
 		h.refreshCache.Put(r, entry)
 		return true, nil
