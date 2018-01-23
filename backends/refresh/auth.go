@@ -50,7 +50,7 @@ const DefaultTimeout = time.Minute
 // If the refresh request returns a http 200 status code then the user
 // is considered logged in.
 type Refresh struct {
-	refreshRequest     *http.Request
+	refreshUrl         string
 	cacheConfig        *cache.Config
 	refreshCache       *cache.HTTPCache
 	timeout            time.Duration
@@ -86,14 +86,9 @@ func constructor(config string) (backend.Backend, error) {
 		return nil, errors.Wrap(err, "unable to parse url "+s)
 	}
 
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error forming refresh token request")
-	}
-
 	rf := &Refresh{
-		refreshRequest: req,
-		refreshCache:   cache.NewHTTPCache(),
+		refreshUrl:   u.String(),
+		refreshCache: cache.NewHTTPCache(),
 		cacheConfig: &cache.Config{
 			Path:        "tmp",
 			LockTimeout: time.Duration(5) * time.Minute,
@@ -206,28 +201,6 @@ func (h Refresh) Authenticate(r *http.Request) (bool, error) {
 	}
 	jwtToken := strings.Split(r.Header.Get("Authorization"), " ")[1]
 
-	c := &http.Client{
-		Timeout: h.timeout,
-	}
-
-	if !h.followRedirects {
-		c.CheckRedirect = noRedirectsPolicy
-	}
-
-	if h.refreshRequest.URL.Scheme == "https" && h.insecureSkipVerify {
-		c.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-	}
-
-	h.refreshRequest.Header.Set("Authorization", r.Header.Get("Authorization"))
-
-	if h.passCookies {
-		for _, c := range r.Cookies() {
-			h.refreshRequest.AddCookie(c)
-		}
-	}
-
 	if _, freshness := h.refreshCache.GetFreshness(r, jwtToken); freshness == 0 {
 		// get value stored in cache to pass on context
 		return true, nil
@@ -236,12 +209,36 @@ func (h Refresh) Authenticate(r *http.Request) (bool, error) {
 		return false, nil
 	}
 
-	if entry, body, err := fetchRefresh(c, jwtToken, r, h.refreshRequest, h.cacheConfig); err != nil {
+	c := &http.Client{
+		Timeout: h.timeout,
+	}
+
+	if !h.followRedirects {
+		c.CheckRedirect = noRedirectsPolicy
+	}
+
+	req, err := http.NewRequest("GET", h.refreshUrl, nil)
+	if err != nil {
+		return false, err
+	}
+
+	if req.URL.Scheme == "https" && h.insecureSkipVerify {
+		c.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
+	if h.passCookies {
+		for _, c := range r.Cookies() {
+			req.AddCookie(c)
+		}
+	}
+
+	if entry, body, err := fetchRefresh(c, jwtToken, r, req, h.cacheConfig); err != nil {
 		return false, err
 
 	} else {
 		if fileStore, err := storage.NewFileStorage(h.cacheConfig.Path); err != nil {
-			fmt.Println(err)
 			return false, errors.Wrap(err, "Error setting up file storage for cache")
 
 		} else {
