@@ -68,6 +68,7 @@ var SecurityContext map[string]interface{}
 var accessToken string
 
 func init() {
+	SecurityContext = make(map[string]interface{})
 	err := backend.Register(Backend, constructor)
 	if err != nil {
 		panic(err)
