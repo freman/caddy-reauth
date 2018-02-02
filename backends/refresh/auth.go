@@ -25,13 +25,10 @@
 package refresh
 
 import (
-	// "net/http/httptest"
-	// "bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
-	// "io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -64,11 +61,9 @@ type Refresh struct {
 	passCookies        bool
 }
 
-var SecurityContext map[string]interface{}
 var accessToken string
 
 func init() {
-	SecurityContext = make(map[string]interface{})
 	err := backend.Register(Backend, constructor)
 	if err != nil {
 		panic(err)
@@ -184,8 +179,7 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 	data.Set("grant_type", "refresh_token")
 	data.Add("refresh_token", refreshToken)
 
-	refreshTokenReq, err := http.NewRequest("POST",
-		"https://n0pwyybuji.execute-api.us-west-2.amazonaws.com/pre_prod/aqfer/auth/v1/access_token",
+	refreshTokenReq, err := http.NewRequest("POST", h.refreshUrl+"/aqfer/auth/v1/access_token",
 		strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
@@ -222,16 +216,18 @@ func (h *Refresh) GetAccessToken(c *http.Client, refreshTokenReq *http.Request) 
 			if b["message"] == "Forbidden" {
 				return errors.New("Auth endpoint returned Forbidden")
 			}
-			accessToken = b["jwt_token"].(string)
+			if b["jwt_token"] != nil {
+				accessToken = b["jwt_token"].(string)
+			}
 
 			return h.newEntry(accessToken, refreshResp.StatusCode, refreshTokenReq, refreshBody)
 		}
 	}
 }
 
-func (h Refresh) requestSecurityContext(c *http.Client, requestToAuth *http.Request, clientJwtToken string) (interface{}, error) {
+func (h Refresh) requestSecurityContext(c *http.Client, requestToAuth *http.Request, clientJwtToken string) ([]byte, error) {
 	if securityContextReq, err := http.NewRequest("GET",
-		"https://n0pwyybuji.execute-api.us-west-2.amazonaws.com/pre_prod/aqfer/auth/v1/security_context?access_token="+clientJwtToken, nil); err != nil {
+		h.refreshUrl+"/aqfer/auth/v1/security_context?access_token="+clientJwtToken, nil); err != nil {
 
 		return nil, err
 	} else {
@@ -251,14 +247,17 @@ func (h Refresh) requestSecurityContext(c *http.Client, requestToAuth *http.Requ
 			} else {
 				var b map[string]interface{}
 				json.Unmarshal(securityContextBody, &b)
-				if b["message"] == "Forbidden" || b["error"] != nil {
-					return nil, errors.New("Auth endpoint returned Forbidden")
+				if b["message"] == "Forbidden" {
+					return nil, errors.New("Security Context endpoint returned Forbidden")
+				}
+				if b["error"] != nil {
+					return nil, errors.New(fmt.Sprintf("Security Context endpoint returned error: %v", b["error"]))
 				}
 
 				if err := h.newEntry(clientJwtToken, securityContextResp.StatusCode, requestToAuth, securityContextBody); err != nil {
 					return nil, err
 				} else {
-					return b, nil
+					return securityContextBody, nil
 				}
 			}
 		}
@@ -332,15 +331,13 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 			return false, errors.Wrap(err, "Error reading security context from cache")
 
 		} else {
-			// security context pulled from cache and put in play
-			var b interface{}
-			json.Unmarshal(securityContextBody, &b)
-			SecurityContext[clientJwtToken] = b
+			requestToAuth.ParseForm()
+			requestToAuth.Form["security_context"] = []string{string(securityContextBody)}
 		}
 
 	} else if freshness == 1 { // client token is not stored
 		if securityContext, err := h.requestSecurityContext(c, requestToAuth, clientJwtToken); err != nil {
-			if err.Error() == "Invalid response from security context endpoint" {
+			if strings.Contains(err.Error(), "Security Context endpoint returned") {
 				// Unauthorized from security context endpoint, TODO: check with Thiru if this is correct
 				return false, nil
 
@@ -348,8 +345,8 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 				return false, err
 			}
 		} else {
-			// storing security context for first time
-			SecurityContext[clientJwtToken] = securityContext
+			requestToAuth.ParseForm()
+			requestToAuth.Form["security_context"] = []string{string(securityContext)}
 		}
 
 	} else if freshness == 2 {
