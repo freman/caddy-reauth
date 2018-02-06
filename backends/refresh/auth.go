@@ -179,8 +179,7 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 	data.Set("grant_type", "refresh_token")
 	data.Add("refresh_token", refreshToken)
 
-	refreshTokenReq, err := http.NewRequest("POST", h.refreshUrl+"/aqfer/auth/v1/access_token",
-		strings.NewReader(data.Encode()))
+	refreshTokenReq, err := http.NewRequest("POST", h.refreshUrl+"/aqfer/auth/v1/access_token", strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
 	}
