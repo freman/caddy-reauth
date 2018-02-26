@@ -14,6 +14,7 @@ The following backends are supported.
 * [Simple](#simple)
 * [Upstream](#upstream)
 * [GitlabCI](#gitlabci)
+* [LDAP](#ldap)
 
 With more to come...
 
@@ -97,6 +98,29 @@ Example of logging in via gitlab-ci.yml
 
 ```
 	docker login docker.example.com -u "$CI_PROJECT_PATH" -p "$CI_BUILD_TOKEN"
+```
+
+### LDAP
+
+Authenticate against a specified LDAP server - for example a Microsoft AD server.
+
+Parameters for this backend are JSON-encoded!
+
+| Parameter-Name    | Description                                                                              |
+| ------------------|------------------------------------------------------------------------------------------|
+| host              | host, required - i.e. ldap.example.com |
+| port              | port, optional (default 389)           |
+| tls               | should StartTLS be used? (default false) |
+| bindUsername      | (read-only) bind username - i.e. ldap-auth |
+| bindPassword      | the password for the bind username         |
+| skipverify        | true to ignore TLS errors (optional, false by default)                                   |
+| timeout           | request timeout (optional 1m by default, go duration syntax is supported)                |
+| base              | Search base, for example "OU=Users,OU=Company,DC=example,DC=com"                         |
+| filter            | Filter the users, for example "(&(memberOf=CN=group,OU=Users,OU=Company,DC=example,DC=com)(objectClass=user)(sAMAccountName=%s))"                                                   |
+
+Example
+```
+	ldap {"url":"ldap://ldap-auth:passw@ldap.example.com:389","timeout":"5s","skipverify":true,"base":"OU=Users,OU=Company,DC=example,DC=com","filter":"(&(memberOf=CN=group,OU=Users,OU=Company,DC=example,DC=com)(objectClass=user)(sAMAccountName=%s))"}
 ```
 
 ## Failure handlers
