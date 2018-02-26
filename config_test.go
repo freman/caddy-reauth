@@ -31,7 +31,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 			`Only take blocks, no arguments`,
 			`reauth /nothing`,
 			nil,
-			errors.New(`Testfile:1 - Parse error: Wrong argument count or unexpected line ending after '/nothing'`),
+			errors.New(`Testfile:1 - Error during parsing: Wrong argument count or unexpected line ending after '/nothing'`),
 		}, {
 			`Make sure that at least one backend is required`,
 			`reauth {
@@ -51,7 +51,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				path /test /test2
 			}`,
 			nil,
-			errors.New(`Testfile:2 - Parse error: Wrong argument count or unexpected line ending after '/test2'`),
+			errors.New(`Testfile:2 - Error during parsing: Wrong argument count or unexpected line ending after '/test2'`),
 		}, {
 			`Two or more paths is ok`,
 			`reauth {
@@ -72,7 +72,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				path
 			}`,
 			nil,
-			errors.New(`Testfile:2 - Parse error: Wrong argument count or unexpected line ending after 'path'`),
+			errors.New(`Testfile:2 - Error during parsing: Wrong argument count or unexpected line ending after 'path'`),
 		}, {
 			`Make sure that arg counts are checked, there should be 1 argument`,
 			`reauth {
@@ -100,7 +100,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				except
 			}`,
 			nil,
-			errors.New(`Testfile:2 - Parse error: Wrong argument count or unexpected line ending after 'except'`),
+			errors.New(`Testfile:2 - Error during parsing: Wrong argument count or unexpected line ending after 'except'`),
 		}, {
 			`Non existant backends could be fun right?`,
 			`reauth {
@@ -139,7 +139,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			nil,
-			errors.New(`Testfile:3 - Parse error: Wrong argument count or unexpected line ending after '/other/thing'`),
+			errors.New(`Testfile:3 - Error during parsing: Wrong argument count or unexpected line ending after '/other/thing'`),
 		}, {
 			`Multiple single exceptions are good`,
 			`reauth {
@@ -163,7 +163,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			nil,
-			errors.New(`Testfile:3 - Parse error: Wrong argument count or unexpected line ending after 'failure'`),
+			errors.New(`Testfile:3 - Error during parsing: Wrong argument count or unexpected line ending after 'failure'`),
 		}, {
 			`Status can be no arguments`,
 			`reauth {
@@ -198,7 +198,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			nil,
-			errors.New(`Testfile:3 - Parse error: Wrong argument count or unexpected line ending after 'thing'`),
+			errors.New(`Testfile:3 - Error during parsing: Wrong argument count or unexpected line ending after 'thing'`),
 		}, {
 			`Redirect requires 1 argument`,
 			`reauth {
@@ -207,7 +207,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			nil,
-			errors.New(`Testfile:3 - Parse error: configuration required for failure redirect`),
+			errors.New(`Testfile:3 - Error during parsing: configuration required for failure redirect`),
 		}, {
 			`Redirect requires 1 argument`,
 			`reauth {
@@ -216,7 +216,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			nil,
-			errors.New(`Testfile:3 - Parse error: target url required for failure redirect`),
+			errors.New(`Testfile:3 - Error during parsing: target url required for failure redirect`),
 		}, {
 			`What's a foo failure?`,
 			`reauth {
@@ -225,7 +225,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			nil,
-			errors.New(`Testfile:3 - Parse error: unknown failure handler foo: `),
+			errors.New(`Testfile:3 - Error during parsing: unknown failure handler foo: `),
 		}, {
 			`Only one failure please`,
 			`reauth {
@@ -235,7 +235,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username=password
 			}`,
 			nil,
-			errors.New(`Testfile:4 - Parse error: Wrong argument count or unexpected line ending after 'failure'`),
+			errors.New(`Testfile:4 - Error during parsing: Wrong argument count or unexpected line ending after 'failure'`),
 		},
 	}
 
