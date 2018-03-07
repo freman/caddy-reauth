@@ -102,30 +102,26 @@ func constructor(config string) (backend.Backend, error) {
 	val, err := parseDurationOption(options, "timeout")
 	if err != nil {
 		return nil, err
-	} else {
-		rf.timeout = val
 	}
+	rf.timeout = val
 
 	bval, err := parseBoolOption(options, "skipverify")
 	if err != nil {
 		return nil, err
-	} else {
-		rf.insecureSkipVerify = bval
 	}
+	rf.insecureSkipVerify = bval
 
 	bval, err = parseBoolOption(options, "follow")
 	if err != nil {
 		return nil, err
-	} else {
-		rf.followRedirects = bval
 	}
+	rf.followRedirects = bval
 
 	bval, err = parseBoolOption(options, "cookies")
 	if err != nil {
 		return nil, err
-	} else {
-		rf.passCookies = bval
 	}
+	rf.passCookies = bval
 
 	// Cache config
 	if s, found := options["cache_path"]; found {
@@ -135,9 +131,8 @@ func constructor(config string) (backend.Backend, error) {
 	val, err = parseDurationOption(options, "lock_timeout")
 	if err != nil {
 		return nil, err
-	} else {
-		rf.cacheConfig.LockTimeout = val
 	}
+	rf.cacheConfig.LockTimeout = val
 
 	// Can't really define cache rules in one line, it would require refactor of parsing configs
 	// so for now these two Config params stay out, and since cacheRules will be nil,
@@ -153,22 +148,14 @@ func constructor(config string) (backend.Backend, error) {
 
 func parseBoolOption(options map[string]string, key string) (bool, error) {
 	if s, found := options[key]; found {
-		if b, err := strconv.ParseBool(s); err != nil {
-			return false, errors.Wrap(err, fmt.Sprintf("unable to parse %s %s", key, s))
-		} else {
-			return b, nil
-		}
+		return strconv.ParseBool(s)
 	}
 	return false, nil
 }
 
 func parseDurationOption(options map[string]string, key string) (time.Duration, error) {
 	if s, found := options[key]; found {
-		if d, err := time.ParseDuration(s); err != nil {
-			return time.Duration(0), errors.Wrap(err, fmt.Sprintf("unable to parse %s %s", key, s))
-		} else {
-			return d, nil
-		}
+		return time.ParseDuration(s)
 	}
 	return DefaultTimeout, nil
 }
@@ -227,10 +214,9 @@ func (h *Refresh) GetAccessToken(c *http.Client, refreshTokenReq *http.Request) 
 func (h Refresh) requestSecurityContext(c *http.Client, requestToAuth *http.Request, clientJwtToken string) ([]byte, error) {
 	if securityContextReq, err := http.NewRequest("GET",
 		h.refreshUrl+"/aqfer/auth/v1/security_context?access_token="+clientJwtToken, nil); err != nil {
-
 		return nil, err
-	} else {
 
+	} else {
 		securityContextReq.Header.Add("Authorization", "Bearer "+accessToken)
 		if securityContextResp, err := c.Do(securityContextReq); err != nil {
 			return nil, err
