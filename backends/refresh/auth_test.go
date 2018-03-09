@@ -16,8 +16,8 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/fellou89/caddy-cache"
-	. "github.com/fellou89/caddy-secrets"
 	"github.com/satori/go.uuid"
+	. "github.com/startsmartlabs/caddy-secrets"
 )
 
 type Claims struct {

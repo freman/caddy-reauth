@@ -39,7 +39,7 @@ import (
 	"github.com/fellou89/caddy-cache"
 	"github.com/fellou89/caddy-cache/storage"
 	"github.com/fellou89/caddy-reauth/backend"
-	. "github.com/fellou89/caddy-secrets"
+	. "github.com/startsmartlabs/caddy-secrets"
 )
 
 // Backend name
