@@ -39,6 +39,8 @@ import (
 	"github.com/fellou89/caddy-cache"
 	"github.com/fellou89/caddy-cache/storage"
 	"github.com/fellou89/caddy-reauth/backend"
+
+	. "github.com/fellou89/caddy-awscloudwatch"
 	. "github.com/startsmartlabs/caddy-secrets"
 )
 
@@ -278,11 +280,11 @@ func (h Refresh) newEntry(key string, statusCode int, req *http.Request, body []
 func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	if requestToAuth.Header.Get("Authorization") == "" {
 		// No Token, Unauthorized response
-		return false, nil
+		return failAuth(false, nil)
 	}
 	authHeader := strings.Split(requestToAuth.Header.Get("Authorization"), " ")
 	if len(authHeader) != 2 || authHeader[0] != "Bearer" {
-		return false, errors.New("Authorization token not properly formatted")
+		return failAuth(false, errors.New("Authorization token not properly formatted"))
 	}
 	clientJwtToken := authHeader[1]
 
@@ -294,18 +296,18 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	// puts together refresh request to get access token
 	refreshTokenReq, err := h.refreshRequestObject(c, requestToAuth)
 	if err != nil {
-		return false, err
+		return failAuth(false, err)
 	}
 
 	if len(accessToken) == 0 { // no access token stored, request one
 		if err := h.GetAccessToken(c, refreshTokenReq); err != nil {
-			return false, err
+			return failAuth(false, err)
 		}
 
 	} else { // access token stored; if not fresh, get new one
 		if _, freshness := h.refreshCache.GetFreshness(refreshTokenReq, accessToken); freshness == 2 {
 			if err := h.GetAccessToken(c, refreshTokenReq); err != nil {
-				return false, err
+				return failAuth(false, err)
 			}
 		}
 	}
@@ -313,7 +315,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	// now that an access token is stored in cache, check client token freshness and get security context
 	if entry, freshness := h.refreshCache.GetFreshness(requestToAuth, clientJwtToken); freshness == 0 {
 		if securityContextBody, err := entry.Response.Read(); err != nil {
-			return false, errors.Wrap(err, "Error reading security context from cache")
+			return failAuth(false, errors.Wrap(err, "Error reading security context from cache"))
 
 		} else {
 			requestToAuth.ParseForm()
@@ -324,10 +326,11 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		if securityContext, err := h.requestSecurityContext(c, requestToAuth, clientJwtToken); err != nil {
 			if strings.Contains(err.Error(), "Security Context endpoint returned") {
 				// Unauthorized from security context endpoint, TODO: check with Thiru if this is correct
+				LoggerInstance.Error(err.Error())
 				return false, nil
 
 			} else {
-				return false, err
+				return failAuth(false, err)
 			}
 		} else {
 			requestToAuth.ParseForm()
@@ -336,8 +339,16 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 
 	} else if freshness == 2 {
 		// client token expired, Unauthorized response
+		LoggerInstance.Error("Expired cached file")
 		return false, nil
 	}
 
 	return true, nil
+}
+
+func failAuth(result bool, err error) (bool, error) {
+	if err != nil {
+		LoggerInstance.Error(err.Error())
+	}
+	return result, err
 }
