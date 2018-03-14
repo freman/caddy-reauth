@@ -166,7 +166,7 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 	data.Set("grant_type", "refresh_token")
 	data.Add("refresh_token", refreshToken)
 
-	refreshTokenReq, err := http.NewRequest("POST", h.refreshUrl+"/aqfer/auth/v1/access_token", strings.NewReader(data.Encode()))
+	refreshTokenReq, err := http.NewRequest("POST", h.refreshUrl+"/v1/access_token", strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (h *Refresh) GetAccessToken(c *http.Client, refreshTokenReq *http.Request) 
 
 func (h Refresh) requestSecurityContext(c *http.Client, requestToAuth *http.Request, clientJwtToken string) ([]byte, error) {
 	if securityContextReq, err := http.NewRequest("GET",
-		h.refreshUrl+"/aqfer/auth/v1/security_context?access_token="+clientJwtToken, nil); err != nil {
+		h.refreshUrl+"/v1/security_context?access_token="+clientJwtToken, nil); err != nil {
 		return nil, err
 
 	} else {
