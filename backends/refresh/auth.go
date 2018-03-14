@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -40,7 +41,6 @@ import (
 	"github.com/fellou89/caddy-cache/storage"
 	"github.com/fellou89/caddy-reauth/backend"
 
-	. "github.com/fellou89/caddy-awscloudwatch"
 	. "github.com/startsmartlabs/caddy-secrets"
 )
 
@@ -326,7 +326,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		if securityContext, err := h.requestSecurityContext(c, requestToAuth, clientJwtToken); err != nil {
 			if strings.Contains(err.Error(), "Security Context endpoint returned") {
 				// Unauthorized from security context endpoint, TODO: check with Thiru if this is correct
-				LoggerInstance.Error(err.Error())
+				log.Println(err.Error())
 				return false, nil
 
 			} else {
@@ -339,7 +339,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 
 	} else if freshness == 2 {
 		// client token expired, Unauthorized response
-		LoggerInstance.Error("Expired cached file")
+		log.Println(err.Error())
 		return false, nil
 	}
 
@@ -348,7 +348,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 
 func failAuth(result bool, err error) (bool, error) {
 	if err != nil {
-		LoggerInstance.Error(err.Error())
+		log.Println(err.Error())
 	}
 	return result, err
 }
