@@ -339,7 +339,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 
 	} else if freshness == 2 {
 		// client token expired, Unauthorized response
-		log.Println(err.Error())
+		log.Println("Client access token was not fresh")
 		return false, nil
 	}
 
