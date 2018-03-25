@@ -37,8 +37,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fellou89/caddy-cache"
-	"github.com/fellou89/caddy-cache/storage"
+	"github.com/allegro/bigcache"
+
 	"github.com/fellou89/caddy-reauth/backend"
 
 	. "github.com/startsmartlabs/caddy-secrets"
@@ -55,15 +55,14 @@ const DefaultTimeout = time.Minute
 // is considered logged in.
 type Refresh struct {
 	refreshUrl         string
-	cacheConfig        *cache.Config
-	refreshCache       *cache.HTTPCache
+	refreshCache       *bigcache.BigCache
 	timeout            time.Duration
 	insecureSkipVerify bool
 	followRedirects    bool
 	passCookies        bool
 }
 
-var accessToken string
+var refreshAccessToken string
 
 func init() {
 	err := backend.Register(Backend, constructor)
@@ -82,6 +81,8 @@ func constructor(config string) (backend.Backend, error) {
 		return nil, err
 	}
 
+	cache, _ := bigcache.NewBigCache(bigcache.DefaultConfig(3 * time.Hour))
+
 	s, found := options["url"]
 	if !found {
 		return nil, errors.New("url is a required parameter")
@@ -94,11 +95,7 @@ func constructor(config string) (backend.Backend, error) {
 
 	rf := &Refresh{
 		refreshUrl:   u.String(),
-		refreshCache: cache.NewHTTPCache(),
-		cacheConfig: &cache.Config{
-			Path:        "tmp",
-			LockTimeout: time.Duration(5) * time.Minute,
-		},
+		refreshCache: cache,
 	}
 
 	val, err := parseDurationOption(options, "timeout")
@@ -126,15 +123,15 @@ func constructor(config string) (backend.Backend, error) {
 	rf.passCookies = bval
 
 	// Cache config
-	if s, found := options["cache_path"]; found {
-		rf.cacheConfig.Path = s
-	}
+	// if s, found := options["cache_path"]; found {
+	// 	rf.cacheConfig.Path = s
+	// }
 
-	val, err = parseDurationOption(options, "lock_timeout")
-	if err != nil {
-		return nil, err
-	}
-	rf.cacheConfig.LockTimeout = val
+	// val, err = parseDurationOption(options, "lock_timeout")
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// rf.cacheConfig.LockTimeout = val
 
 	// Can't really define cache rules in one line, it would require refactor of parsing configs
 	// so for now these two Config params stay out, and since cacheRules will be nil,
@@ -188,7 +185,7 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 	return refreshTokenReq, nil
 }
 
-func (h *Refresh) GetAccessToken(c *http.Client, refreshTokenReq *http.Request) error {
+func (h *Refresh) SetAccessToken(c *http.Client, refreshTokenReq *http.Request) error {
 	refreshTokenReq.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	if refreshResp, err := c.Do(refreshTokenReq); err != nil {
@@ -205,10 +202,11 @@ func (h *Refresh) GetAccessToken(c *http.Client, refreshTokenReq *http.Request) 
 				return errors.New("Auth endpoint returned Forbidden")
 			}
 			if b["jwt_token"] != nil {
-				accessToken = b["jwt_token"].(string)
+				refreshAccessToken = b["jwt_token"].(string)
 			}
 
-			return h.newEntry(accessToken, refreshResp.StatusCode, refreshTokenReq, refreshBody)
+			return nil
+			// return h.newEntry(accessToken, refreshResp.StatusCode, refreshTokenReq, refreshBody)
 		}
 	}
 }
@@ -219,7 +217,7 @@ func (h Refresh) requestSecurityContext(c *http.Client, requestToAuth *http.Requ
 		return nil, err
 
 	} else {
-		securityContextReq.Header.Add("Authorization", "Bearer "+accessToken)
+		securityContextReq.Header.Add("Authorization", "Bearer "+refreshAccessToken)
 		if securityContextResp, err := c.Do(securityContextReq); err != nil {
 			return nil, err
 
@@ -241,40 +239,41 @@ func (h Refresh) requestSecurityContext(c *http.Client, requestToAuth *http.Requ
 					return nil, errors.New(fmt.Sprintf("Security Context endpoint returned error: %v", b["error"]))
 				}
 
-				if err := h.newEntry(clientJwtToken, securityContextResp.StatusCode, requestToAuth, securityContextBody); err != nil {
-					return nil, err
-				} else {
-					return securityContextBody, nil
-				}
+				// if err := h.newEntry(clientJwtToken, securityContextResp.StatusCode, requestToAuth, securityContextBody); err != nil {
+				// 	return nil, err
+				// } else {
+				// 	return securityContextBody, nil
+				// }
+				return securityContextBody, nil
 			}
 		}
 	}
 }
 
-func (h Refresh) newEntry(key string, statusCode int, req *http.Request, body []byte) error {
-	response := cache.NewResponse()
-	// This creates cache files that can only live for 3 hours,
-	// implementing token expiry without having to parse jwt token
-	response.Header().Set("Cache-Control", "public,max-age=10800")
-	response.WriteHeader(statusCode)
-
-	// TODO: should I be using a lock?
-	// lock := handler.URLLocks.Adquire(getKey(r))
-
-	entry := cache.NewHTTPCacheEntry(key, req, response, h.cacheConfig)
-
-	fileStore, err := storage.NewFileStorage(h.cacheConfig.Path)
-	if err != nil {
-		return errors.Wrap(err, "Error setting up file storage for cache")
-	}
-	entry.Response.SetBody(fileStore)
-	entry.Response.Write(body)
-	entry.Response.Close()
-	h.refreshCache.Put(req, entry)
-	// lock.Unlock()
-
-	return nil
-}
+// func (h Refresh) newEntry(key string, statusCode int, req *http.Request, body []byte) error {
+// 	response := cache.NewResponse()
+// 	// This creates cache files that can only live for 3 hours,
+// 	// implementing token expiry without having to parse jwt token
+// 	response.Header().Set("Cache-Control", "public,max-age=10800")
+// 	response.WriteHeader(statusCode)
+//
+// 	// TODO: should I be using a lock?
+// 	// lock := handler.URLLocks.Adquire(getKey(r))
+//
+// 	entry := cache.NewHTTPCacheEntry(key, req, response, h.cacheConfig)
+//
+// 	fileStore, err := storage.NewFileStorage(h.cacheConfig.Path)
+// 	if err != nil {
+// 		return errors.Wrap(err, "Error setting up file storage for cache")
+// 	}
+// 	entry.Response.SetBody(fileStore)
+// 	entry.Response.Write(body)
+// 	entry.Response.Close()
+// 	h.refreshCache.Put(req, entry)
+// 	// lock.Unlock()
+//
+// 	return nil
+// }
 
 // Authenticate fulfils the backend interface
 func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
@@ -299,48 +298,77 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		return failAuth(false, err)
 	}
 
-	if len(accessToken) == 0 { // no access token stored, request one
-		if err := h.GetAccessToken(c, refreshTokenReq); err != nil {
-			return failAuth(false, err)
-		}
-
-	} else { // access token stored; if not fresh, get new one
-		if _, freshness := h.refreshCache.GetFreshness(refreshTokenReq, accessToken); freshness == 2 {
-			if err := h.GetAccessToken(c, refreshTokenReq); err != nil {
-				return failAuth(false, err)
-			}
-		}
+	// step 1: get refresh token access token
+	if err := h.SetAccessToken(c, refreshTokenReq); err != nil {
+		return failAuth(false, err)
 	}
 
+	// clientTokenEntry, err := h.refreshCache.Get(clientJwtToken)
+	// if err != nil {
+	// 	if strings.Contains(err.Error(), "EntryNotFoundError") {
+	// 		if err := h.SetAccessToken(c, refreshTokenReq); err != nil {
+	// 			return failAuth(false, err)
+	// 		} else {
+	// 			h.refreshCache.Set(clientJwtToken, []byte(accessToken))
+	// 		}
+	// 	}
+	// } else {
+	// }
+
+	// if len(accessToken) == 0 { // no access token stored, request one
+
+	// } else { // access token stored; if not fresh, get new one
+	// 	if _, freshness := h.refreshCache.GetFreshness(refreshTokenReq, accessToken); freshness == 2 {
+	// 		if err := h.SetAccessToken(c, refreshTokenReq); err != nil {
+	// 			return failAuth(false, err)
+	// 		}
+	// 	}
+	// }
+
 	// now that an access token is stored in cache, check client token freshness and get security context
-	if entry, freshness := h.refreshCache.GetFreshness(requestToAuth, clientJwtToken); freshness == 0 {
-		if securityContextBody, err := entry.Response.Read(); err != nil {
-			return failAuth(false, errors.Wrap(err, "Error reading security context from cache"))
+	// if entry, freshness := h.refreshCache.GetFreshness(requestToAuth, clientJwtToken); freshness == 0 {
+	// 	if securityContextBody, err := entry.Response.Read(); err != nil {
+	// 		return failAuth(false, errors.Wrap(err, "Error reading security context from cache"))
+
+	// 	} else {
+	// 		requestToAuth.ParseForm()
+	// 		requestToAuth.Form["security_context"] = []string{string(securityContextBody)}
+	// 	}
+
+	// } else if freshness == 1 { // client token is not stored
+	// 	if securityContext, err := h.requestSecurityContext(c, requestToAuth, clientJwtToken); err != nil {
+	// 		if strings.Contains(err.Error(), "Security Context endpoint returned") {
+	// 			// Unauthorized from security context endpoint, TODO: check with Thiru if this is correct
+	// 			log.Println(err.Error())
+	// 			return false, nil
+
+	// 		} else {
+	// 			return failAuth(false, err)
+	// 		}
+	// 	} else {
+	// 		requestToAuth.ParseForm()
+	// 		requestToAuth.Form["security_context"] = []string{string(securityContext)}
+	// 	}
+
+	// } else if freshness == 2 {
+	// 	// client token expired, Unauthorized response
+	//  log.Println("Client access token was not fresh")
+	// 	return false, nil
+	// }
+
+	// step 2: get security context
+	if securityContext, err := h.requestSecurityContext(c, requestToAuth, clientJwtToken); err != nil {
+		if strings.Contains(err.Error(), "Security Context endpoint returned") {
+			// Unauthorized from security context endpoint, TODO: check with Thiru if this is correct
+			log.Println(err.Error())
+			return false, nil
 
 		} else {
-			requestToAuth.ParseForm()
-			requestToAuth.Form["security_context"] = []string{string(securityContextBody)}
+			return failAuth(false, err)
 		}
-
-	} else if freshness == 1 { // client token is not stored
-		if securityContext, err := h.requestSecurityContext(c, requestToAuth, clientJwtToken); err != nil {
-			if strings.Contains(err.Error(), "Security Context endpoint returned") {
-				// Unauthorized from security context endpoint, TODO: check with Thiru if this is correct
-				log.Println(err.Error())
-				return false, nil
-
-			} else {
-				return failAuth(false, err)
-			}
-		} else {
-			requestToAuth.ParseForm()
-			requestToAuth.Form["security_context"] = []string{string(securityContext)}
-		}
-
-	} else if freshness == 2 {
-		// client token expired, Unauthorized response
-		log.Println("Client access token was not fresh")
-		return false, nil
+	} else {
+		requestToAuth.ParseForm()
+		requestToAuth.Form["security_context"] = []string{string(securityContext)}
 	}
 
 	return true, nil
