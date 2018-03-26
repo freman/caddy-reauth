@@ -303,17 +303,32 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		return failAuth(false, err)
 	}
 
-	// clientTokenEntry, err := h.refreshCache.Get(clientJwtToken)
-	// if err != nil {
-	// 	if strings.Contains(err.Error(), "EntryNotFoundError") {
-	// 		if err := h.SetAccessToken(c, refreshTokenReq); err != nil {
-	// 			return failAuth(false, err)
-	// 		} else {
-	// 			h.refreshCache.Set(clientJwtToken, []byte(accessToken))
-	// 		}
-	// 	}
-	// } else {
-	// }
+	// step 2: check cache for security context
+	securityContextEntry, err := h.refreshCache.Get(clientJwtToken)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			// step 3: get security context
+			if securityContext, err := h.requestSecurityContext(c, requestToAuth, clientJwtToken); err != nil {
+				if strings.Contains(err.Error(), "Security Context endpoint returned") {
+					// Unauthorized from security context endpoint, TODO: check with Thiru if this is correct
+					log.Println(err.Error())
+					return false, nil
+
+				} else {
+					return failAuth(false, err)
+				}
+			} else {
+				h.refreshCache.Set(clientJwtToken, securityContext)
+				requestToAuth.ParseForm()
+				requestToAuth.Form["security_context"] = []string{string(securityContext)}
+			}
+		} else {
+			return failAuth(false, err)
+		}
+	} else {
+		requestToAuth.ParseForm()
+		requestToAuth.Form["security_context"] = []string{string(securityContextEntry)}
+	}
 
 	// if len(accessToken) == 0 { // no access token stored, request one
 
@@ -355,21 +370,6 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	//  log.Println("Client access token was not fresh")
 	// 	return false, nil
 	// }
-
-	// step 2: get security context
-	if securityContext, err := h.requestSecurityContext(c, requestToAuth, clientJwtToken); err != nil {
-		if strings.Contains(err.Error(), "Security Context endpoint returned") {
-			// Unauthorized from security context endpoint, TODO: check with Thiru if this is correct
-			log.Println(err.Error())
-			return false, nil
-
-		} else {
-			return failAuth(false, err)
-		}
-	} else {
-		requestToAuth.ParseForm()
-		requestToAuth.Form["security_context"] = []string{string(securityContext)}
-	}
 
 	return true, nil
 }
