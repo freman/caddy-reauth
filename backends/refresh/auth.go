@@ -29,6 +29,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -62,8 +63,6 @@ type Refresh struct {
 	passCookies        bool
 }
 
-var refreshAccessToken string
-
 func init() {
 	err := backend.Register(Backend, constructor)
 	if err != nil {
@@ -81,8 +80,6 @@ func constructor(config string) (backend.Backend, error) {
 		return nil, err
 	}
 
-	cache, _ := bigcache.NewBigCache(bigcache.DefaultConfig(3 * time.Hour))
-
 	s, found := options["url"]
 	if !found {
 		return nil, errors.New("url is a required parameter")
@@ -91,6 +88,23 @@ func constructor(config string) (backend.Backend, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to parse url "+s)
+	}
+
+	life, err := parseDurationOption(options, "lifewindow")
+	if err != nil {
+		return nil, err
+	}
+
+	clean, err := parseDurationOption(options, "cleanwindow")
+	if err != nil {
+		return nil, err
+	}
+
+	cacheConfig := bigcache.DefaultConfig(life)
+	cacheConfig.CleanWindow = clean
+	cache, err := bigcache.NewBigCache(cacheConfig)
+	if err != nil {
+		return nil, err
 	}
 
 	rf := &Refresh{
@@ -122,26 +136,6 @@ func constructor(config string) (backend.Backend, error) {
 	}
 	rf.passCookies = bval
 
-	// Cache config
-	// if s, found := options["cache_path"]; found {
-	// 	rf.cacheConfig.Path = s
-	// }
-
-	// val, err = parseDurationOption(options, "lock_timeout")
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// rf.cacheConfig.LockTimeout = val
-
-	// Can't really define cache rules in one line, it would require refactor of parsing configs
-	// so for now these two Config params stay out, and since cacheRules will be nil,
-	// neither is used when creating HTTPCacheEntries
-	//
-	// DefaultMaxAge: time.Duration(5) * time.Minute,
-	// CacheRules:    []cache.CacheRule{},
-	//
-	// rf.cacheConfig.DefaultMaxAge = parseDurationOption(options, "max_age")
-
 	return rf, nil
 }
 
@@ -159,8 +153,8 @@ func parseDurationOption(options map[string]string, key string) (time.Duration, 
 	return DefaultTimeout, nil
 }
 
-func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Request) (*http.Request, error) {
-	refreshToken := SecretsMap[0].Value.(string)
+// func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Request, refreshToken string) (*http.Request, error) {
+func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Request, refreshToken string) ([]byte, error) {
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
 	data.Add("refresh_token", refreshToken)
@@ -182,98 +176,145 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 		}
 	}
 
-	return refreshTokenReq, nil
-}
+	// stuff copied from GetAccessToken
 
-func (h *Refresh) SetAccessToken(c *http.Client, refreshTokenReq *http.Request) error {
 	refreshTokenReq.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	if refreshResp, err := c.Do(refreshTokenReq); err != nil {
-		return errors.Wrap(err, "Error requesting access token")
+		return nil, errors.Wrap(err, "Error requesting access token")
 
 	} else {
 		if refreshBody, err := ioutil.ReadAll(refreshResp.Body); err != nil {
-			return errors.Wrap(err, "Error reading response body from access token refresh")
+			return nil, errors.Wrap(err, "Error reading response body from access token refresh")
 
 		} else {
 			var b map[string]interface{}
 			json.Unmarshal(refreshBody, &b)
 			if b["message"] == "Forbidden" {
-				return errors.New("Auth endpoint returned Forbidden")
-			}
-			if b["jwt_token"] != nil {
-				refreshAccessToken = b["jwt_token"].(string)
+				// return nil, errors.New("Auth endpoint returned Forbidden")
+				fmt.Println("Security Context endpoint returned Forbidden")
+				return nil, nil
 			}
 
-			return nil
-			// return h.newEntry(accessToken, refreshResp.StatusCode, refreshTokenReq, refreshBody)
+			if b["jwt_token"] != nil {
+				return []byte(b["jwt_token"].(string)), nil
+			}
+
+			// return nil, nil
+			return refreshBody, nil
 		}
 	}
+
+	// return refreshTokenReq, nil
 }
 
-func (h Refresh) requestSecurityContext(c *http.Client, requestToAuth *http.Request, clientJwtToken string) ([]byte, error) {
-	if securityContextReq, err := http.NewRequest("GET",
-		h.refreshUrl+"/v1/security_context?access_token="+clientJwtToken, nil); err != nil {
+func (h Refresh) requestSecurityContext(c *http.Client, requestToAuth *http.Request, clientJwtToken, refreshAccessToken string) ([]byte, error) {
+	data := url.Values{}
+	data.Set("access_token", clientJwtToken)
+
+	securityContextReq, err := http.NewRequest("GET", h.refreshUrl+"/v1/security_context?access_token="+clientJwtToken, nil)
+	// securityContextReq, err := http.NewRequest("GET", h.refreshUrl+"/v1/security_context", strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, err
+	}
+
+	securityContextReq.Header.Add("Authorization", "Bearer "+refreshAccessToken)
+
+	if securityContextResp, err := c.Do(securityContextReq); err != nil {
 		return nil, err
 
 	} else {
-		securityContextReq.Header.Add("Authorization", "Bearer "+refreshAccessToken)
-		if securityContextResp, err := c.Do(securityContextReq); err != nil {
-			return nil, err
+		if securityContextResp.StatusCode == 400 {
+			return nil, errors.New("Invalid response from security context endpoint")
+		}
+
+		if securityContextBody, err := ioutil.ReadAll(securityContextResp.Body); err != nil {
+			return nil, errors.Wrap(err, "Error reading response body from security context request")
 
 		} else {
-			if securityContextResp.StatusCode == 400 {
-				return nil, errors.New("Invalid response from security context endpoint")
+			var b map[string]interface{}
+			json.Unmarshal(securityContextBody, &b)
+
+			if b["message"] == "Forbidden" {
+				// return nil, errors.New("Security Context endpoint returned Forbidden")
+				fmt.Println("Security Context endpoint returned Forbidden")
+				return nil, nil
+			}
+			if b["error"] != nil {
+				// return nil, errors.New(fmt.Sprintf("Security Context endpoint returned error: %v", b["error"]))
+				fmt.Printf("Security Context endpoint returned error: %v\n", b["error"])
+				return nil, nil
 			}
 
-			if securityContextBody, err := ioutil.ReadAll(securityContextResp.Body); err != nil {
-				return nil, errors.Wrap(err, "Error reading response body from security context request")
-
-			} else {
-				var b map[string]interface{}
-				json.Unmarshal(securityContextBody, &b)
-				if b["message"] == "Forbidden" {
-					return nil, errors.New("Security Context endpoint returned Forbidden")
-				}
-				if b["error"] != nil {
-					return nil, errors.New(fmt.Sprintf("Security Context endpoint returned error: %v", b["error"]))
-				}
-
-				// if err := h.newEntry(clientJwtToken, securityContextResp.StatusCode, requestToAuth, securityContextBody); err != nil {
-				// 	return nil, err
-				// } else {
-				// 	return securityContextBody, nil
-				// }
-				return securityContextBody, nil
-			}
+			return securityContextBody, nil
 		}
 	}
 }
 
-// func (h Refresh) newEntry(key string, statusCode int, req *http.Request, body []byte) error {
-// 	response := cache.NewResponse()
-// 	// This creates cache files that can only live for 3 hours,
-// 	// implementing token expiry without having to parse jwt token
-// 	response.Header().Set("Cache-Control", "public,max-age=10800")
-// 	response.WriteHeader(statusCode)
+// func (h *Refresh) GetAccessToken(c *http.Client, refreshTokenReq *http.Request) (string, error) {
+// 	refreshTokenReq.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 //
-// 	// TODO: should I be using a lock?
-// 	// lock := handler.URLLocks.Adquire(getKey(r))
+// 	if refreshResp, err := c.Do(refreshTokenReq); err != nil {
+// 		return "", errors.Wrap(err, "Error requesting access token")
 //
-// 	entry := cache.NewHTTPCacheEntry(key, req, response, h.cacheConfig)
+// 	} else {
+// 		if refreshBody, err := ioutil.ReadAll(refreshResp.Body); err != nil {
+// 			return "", errors.Wrap(err, "Error reading response body from access token refresh")
 //
-// 	fileStore, err := storage.NewFileStorage(h.cacheConfig.Path)
-// 	if err != nil {
-// 		return errors.Wrap(err, "Error setting up file storage for cache")
+// 		} else {
+// 			var b map[string]interface{}
+// 			json.Unmarshal(refreshBody, &b)
+// 			if b["message"] == "Forbidden" {
+// 				return "", errors.New("Auth endpoint returned Forbidden")
+// 			}
+// 			if b["jwt_token"] != nil {
+// 				return b["jwt_token"].(string), nil
+// 			}
+//
+// 			return "", nil
+// 		}
 // 	}
-// 	entry.Response.SetBody(fileStore)
-// 	entry.Response.Write(body)
-// 	entry.Response.Close()
-// 	h.refreshCache.Put(req, entry)
-// 	// lock.Unlock()
-//
-// 	return nil
 // }
+
+func getObject(mapslice yaml.MapSlice, key string) yaml.MapSlice {
+	for _, s := range mapslice {
+		if s.Key == key {
+			return s.Value.(yaml.MapSlice)
+		}
+	}
+	return nil
+}
+
+func getArray(mapslice yaml.MapSlice, key string) []interface{} {
+	for _, s := range mapslice {
+		if s.Key == key {
+			return s.Value.([]interface{})
+		}
+	}
+	return nil
+}
+
+func getObjectFromArray(mapsliceArray []interface{}, key string) yaml.MapSlice {
+	for _, endpoint := range mapsliceArray {
+		for _, e := range endpoint.(yaml.MapSlice) {
+			if e.Key == key {
+				return e.Value.(yaml.MapSlice)
+			}
+		}
+	}
+	return nil
+}
+
+func getValueFromArray(mapsliceArray []interface{}, key string) interface{} {
+	for _, endpoint := range mapsliceArray {
+		for _, e := range endpoint.(yaml.MapSlice) {
+			if e.Key == key {
+				return e.Value.(interface{})
+			}
+		}
+	}
+	return nil
+}
 
 // Authenticate fulfils the backend interface
 func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
@@ -285,40 +326,62 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	if len(authHeader) != 2 || authHeader[0] != "Bearer" {
 		return failAuth(false, errors.New("Authorization token not properly formatted"))
 	}
-	clientJwtToken := authHeader[1]
+	clientAccessToken := authHeader[1]
 
 	c := &http.Client{Timeout: h.timeout}
 	if !h.followRedirects {
 		c.CheckRedirect = noRedirectsPolicy
 	}
 
-	// puts together refresh request to get access token
-	refreshTokenReq, err := h.refreshRequestObject(c, requestToAuth)
-	if err != nil {
-		return failAuth(false, err)
-	}
+	reauth := getObject(SecretsMap, "reauth")
+	reauth_endpoints := getArray(reauth, "endpoints")
+	refresh := getObjectFromArray(reauth_endpoints, "refresh")
+	refresh_data := getArray(refresh, "data")
+	refreshToken := getValueFromArray(refresh_data, "refresh_token").(string)
 
-	// step 1: get refresh token access token
-	if err := h.SetAccessToken(c, refreshTokenReq); err != nil {
-		return failAuth(false, err)
+	resultsMap := map[string][]byte{}
+
+	// step 1: check cache for refresh access token
+	refreshAccessEntry, err := h.refreshCache.Get(refreshToken)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			// step 1a: get refresh token access token
+			if accessTokenData, err := h.refreshRequestObject(c, requestToAuth, refreshToken); err != nil {
+				return failAuth(false, err)
+
+			} else {
+				// // puts together refresh request to get access token
+				// refreshTokenReq, err := h.refreshRequestObject(c, requestToAuth, refreshToken)
+				// if err != nil {
+				// 	return failAuth(false, err)
+				// }
+
+				// // step 1a: get refresh token access token
+				// refreshAccessToken, err = h.GetAccessToken(c, refreshTokenReq)
+				// if err != nil {
+				// 	return failAuth(false, err)
+				// }
+				resultsMap["refresh"] = accessTokenData
+				h.refreshCache.Set(refreshToken, accessTokenData)
+			}
+		} else {
+			return failAuth(false, err)
+		}
+	} else {
+		resultsMap["refresh"] = refreshAccessEntry
 	}
 
 	// step 2: check cache for security context
-	securityContextEntry, err := h.refreshCache.Get(clientJwtToken)
+	securityContextEntry, err := h.refreshCache.Get(clientAccessToken)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			// step 3: get security context
-			if securityContext, err := h.requestSecurityContext(c, requestToAuth, clientJwtToken); err != nil {
-				if strings.Contains(err.Error(), "Security Context endpoint returned") {
-					// Unauthorized from security context endpoint, TODO: check with Thiru if this is correct
-					log.Println(err.Error())
-					return false, nil
+			// step 2a: get security context
+			if securityContext, err := h.requestSecurityContext(c, requestToAuth, clientAccessToken, string(resultsMap["refresh"])); err != nil {
+				return failAuth(false, err)
 
-				} else {
-					return failAuth(false, err)
-				}
 			} else {
-				h.refreshCache.Set(clientJwtToken, securityContext)
+				h.refreshCache.Set(clientAccessToken, securityContext)
+
 				requestToAuth.ParseForm()
 				requestToAuth.Form["security_context"] = []string{string(securityContext)}
 			}
@@ -329,47 +392,6 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		requestToAuth.ParseForm()
 		requestToAuth.Form["security_context"] = []string{string(securityContextEntry)}
 	}
-
-	// if len(accessToken) == 0 { // no access token stored, request one
-
-	// } else { // access token stored; if not fresh, get new one
-	// 	if _, freshness := h.refreshCache.GetFreshness(refreshTokenReq, accessToken); freshness == 2 {
-	// 		if err := h.SetAccessToken(c, refreshTokenReq); err != nil {
-	// 			return failAuth(false, err)
-	// 		}
-	// 	}
-	// }
-
-	// now that an access token is stored in cache, check client token freshness and get security context
-	// if entry, freshness := h.refreshCache.GetFreshness(requestToAuth, clientJwtToken); freshness == 0 {
-	// 	if securityContextBody, err := entry.Response.Read(); err != nil {
-	// 		return failAuth(false, errors.Wrap(err, "Error reading security context from cache"))
-
-	// 	} else {
-	// 		requestToAuth.ParseForm()
-	// 		requestToAuth.Form["security_context"] = []string{string(securityContextBody)}
-	// 	}
-
-	// } else if freshness == 1 { // client token is not stored
-	// 	if securityContext, err := h.requestSecurityContext(c, requestToAuth, clientJwtToken); err != nil {
-	// 		if strings.Contains(err.Error(), "Security Context endpoint returned") {
-	// 			// Unauthorized from security context endpoint, TODO: check with Thiru if this is correct
-	// 			log.Println(err.Error())
-	// 			return false, nil
-
-	// 		} else {
-	// 			return failAuth(false, err)
-	// 		}
-	// 	} else {
-	// 		requestToAuth.ParseForm()
-	// 		requestToAuth.Form["security_context"] = []string{string(securityContext)}
-	// 	}
-
-	// } else if freshness == 2 {
-	// 	// client token expired, Unauthorized response
-	//  log.Println("Client access token was not fresh")
-	// 	return false, nil
-	// }
 
 	return true, nil
 }
