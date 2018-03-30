@@ -328,8 +328,13 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 					return failAuth(false, err)
 
 				} else {
-					resultsMap[endpoint.Name] = string(responseData)
-					h.refreshCache.Set(resultsMap[endpoint.Cachekey], responseData)
+					if responseData == nil {
+						return false, nil
+
+					} else {
+						resultsMap[endpoint.Name] = string(responseData)
+						h.refreshCache.Set(resultsMap[endpoint.Cachekey], responseData)
+					}
 				}
 			} else {
 				return failAuth(false, err)
@@ -339,8 +344,11 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		}
 	}
 
-	requestToAuth.ParseForm()
-	requestToAuth.Form[getValue(reauth, "resultkey").(string)] = []string{resultsMap[endpoints[len(endpoints)-1].Name]}
+	resultkey := getValue(reauth, "resultkey").(string)
+	if len(resultkey) > 0 {
+		requestToAuth.ParseForm()
+		requestToAuth.Form[resultkey] = []string{resultsMap[endpoints[len(endpoints)-1].Name]}
+	}
 
 	return true, nil
 }
