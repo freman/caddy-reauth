@@ -271,6 +271,15 @@ func getArray(mapslice yaml.MapSlice, key string) []interface{} {
 	return nil
 }
 
+func getValue(mapslice yaml.MapSlice, key string) interface{} {
+	for _, s := range mapslice {
+		if s.Key == key {
+			return s.Value
+		}
+	}
+	return nil
+}
+
 // Authenticate fulfils the backend interface
 func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	if requestToAuth.Header.Get("Authorization") == "" {
@@ -289,7 +298,8 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		c.CheckRedirect = noRedirectsPolicy
 	}
 
-	reauthEndpoints := getArray(getObject(SecretsMap, "reauth"), "endpoints")
+	reauth := getObject(SecretsMap, "reauth")
+	reauthEndpoints := getArray(reauth, "endpoints")
 	endpointData, err := yaml.Marshal(reauthEndpoints)
 	if err != nil {
 		return failAuth(false, errors.New("Endpoints yaml not setup properly in secrets file"))
@@ -297,6 +307,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	var endpoints []Endpoint
 	yaml.Unmarshal(endpointData, &endpoints)
 
+	// this specific structure is needed in the secrets file to have a refresh token available
 	for _, e := range endpoints {
 		if e.Name == "refresh" {
 			for _, d := range e.Data {
@@ -329,7 +340,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	}
 
 	requestToAuth.ParseForm()
-	requestToAuth.Form["security_context"] = []string{resultsMap["security_context"]}
+	requestToAuth.Form[getValue(reauth, "resultkey").(string)] = []string{resultsMap[endpoints[len(endpoints)-1].Name]}
 
 	return true, nil
 }
