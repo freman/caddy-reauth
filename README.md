@@ -81,6 +81,7 @@ Example
 ### Refresh
 
 Authentication with Refresh Token against configurable endpoints with response caching and cache entry expiration times. If failure conditions in the configuration file are met a 401 is returned otherwise result will be successful.
+This module is designed to be used with the [caddy-secrets](https://github.com/startsmartlabs/caddy-secrets) plugin, a yaml file with a `reauth` object with an `endpoints` array will hold configurations for endpoints and how they work together for auth service.
 
 Parameters for this backend:
 
@@ -94,14 +95,14 @@ Parameters for this backend:
 | lifewindow        | time interval that a file cached by this module will remain valid (default 3 hours)      |
 | cleanwindow       | time interval to clean cache of expired entries (default 1 second)                       |
 
-Example
+Examples
 
 - Caddyfile
 ```
         refresh url=https://example.com,skipverify=true,timeout=5s,lifewindow=3h,cleanwindow=1s
 ```
 
-- Secrets
+- Secrets file
 ```
 reauth:
   authorization: true                                 # authorization bool (required) - whether to check for Authorization header,

@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/allegro/bigcache"
 	"github.com/dgrijalva/jwt-go"
-	"github.com/fellou89/caddy-cache"
 	"github.com/satori/go.uuid"
-	. "github.com/startsmartlabs/caddy-secrets"
+	"github.com/startsmartlabs/caddy-secrets"
 )
 
 type Claims struct {
@@ -159,21 +159,18 @@ func authTokenCheck(w http.ResponseWriter, r *http.Request) {
 func TestAuthenticateSimple(t *testing.T) {
 	fmt.Printf("\n-----TestAuthenticateSimple-----\n")
 
-	SecretsMap = append(SecretsMap, yaml.MapItem{Key: "a", Value: token})
+	secrets.SecretsMap = append(secrets.SecretsMap, yaml.MapItem{Key: "a", Value: token})
 
 	srv := httptest.NewServer(http.HandlerFunc(authTokenCheck))
 	defer func() {
 		srv.Close()
 	}()
 
+	cache, _ := bigcache.NewBigCache(bigcache.DefaultConfig(time.Minute))
 	rf := &Refresh{
 		refreshUrl:   srv.URL,
-		refreshCache: cache.NewHTTPCache(),
-		cacheConfig: &cache.Config{
-			Path:        "tmp",
-			LockTimeout: time.Duration(5) * time.Minute,
-		},
-		timeout: DefaultTimeout,
+		refreshCache: cache,
+		timeout:      DefaultTimeout,
 	}
 
 	t.Log("Testing no credentials")
@@ -230,11 +227,18 @@ func TestAuthenticateSimple(t *testing.T) {
 func TestAuthenticateConstructor(t *testing.T) {
 	fmt.Printf("\n-----TestAuthenticateConstructor-----\n")
 
-	SecretsMap = append(SecretsMap, yaml.MapItem{Key: "a", Value: "a"})
+	reauth := yaml.MapSlice{}
+	reauth = append(reauth, yaml.MapItem{
+		Key:   "authorization",
+		Value: true,
+	})
+	secrets.SecretsMap = append(secrets.SecretsMap, yaml.MapItem{
+		Key:   "reauth",
+		Value: reauth,
+	})
 
 	url := "http://google.com"
-	cacheConfig := &cache.Config{Path: "tmp", LockTimeout: time.Duration(5) * time.Minute}
-	refreshCache := cache.NewHTTPCache()
+	refreshCache, _ := bigcache.NewBigCache(bigcache.DefaultConfig(time.Minute))
 
 	tests := []struct {
 		desc   string
@@ -263,7 +267,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 		{ // 4
 			`With valid arguments`,
 			`url=http://google.com,timeout=5s,skipverify=true,follow=true,cache_path=tmp,lock_timeout=5m`,
-			&Refresh{refreshUrl: url, timeout: 5 * time.Second, insecureSkipVerify: true, followRedirects: true, cacheConfig: cacheConfig, refreshCache: refreshCache},
+			&Refresh{refreshUrl: url, timeout: 5 * time.Second, insecureSkipVerify: true, followRedirects: true, refreshCache: refreshCache},
 			nil,
 		},
 		{ // 5
@@ -332,8 +336,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 			if !ok {
 				t.Errorf("%d Expected *Refresh, got %T", i+1, be)
 			} else if tc.expect.refreshUrl == actual.refreshUrl &&
-				tc.expect.refreshCache == actual.refreshCache &&
-				tc.expect.cacheConfig.Path == actual.cacheConfig.Path {
+				tc.expect.refreshCache == actual.refreshCache {
 				t.Errorf("%d Expected \n%+v got \n%+v", i+1, tc.expect, actual)
 			}
 		}
