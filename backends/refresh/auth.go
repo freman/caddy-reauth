@@ -51,6 +51,8 @@ const Backend = "refresh"
 
 // DefaultTimeout for sub requests
 const DefaultTimeout = time.Minute
+const DefaultLifeWindow = 3 * time.Hour
+const DefaultCleanWindow = time.Second
 
 // Refresh backend provides authentication against a refresh token endpoint.
 // If the refresh request returns a http 200 status code then the user
@@ -91,12 +93,12 @@ func constructor(config string) (backend.Backend, error) {
 		return nil, errors.Wrap(err, "unable to parse url "+s)
 	}
 
-	life, err := parseDurationOption(options, "lifewindow")
+	life, err := parseDurationOption(options, "lifewindow", DefaultLifeWindow)
 	if err != nil {
 		return nil, err
 	}
 
-	clean, err := parseDurationOption(options, "cleanwindow")
+	clean, err := parseDurationOption(options, "cleanwindow", DefaultCleanWindow)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +115,7 @@ func constructor(config string) (backend.Backend, error) {
 		refreshCache: cache,
 	}
 
-	val, err := parseDurationOption(options, "timeout")
+	val, err := parseDurationOption(options, "timeout", DefaultTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -147,21 +149,17 @@ func parseBoolOption(options map[string]string, key string) (bool, error) {
 	return false, nil
 }
 
-func parseDurationOption(options map[string]string, key string) (time.Duration, error) {
+func parseDurationOption(options map[string]string, key string, def time.Duration) (time.Duration, error) {
 	if s, found := options[key]; found {
 		return time.ParseDuration(s)
 	}
-	return DefaultTimeout, nil
+	return def, nil
 }
 
 func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Request, endpoint Endpoint, inputMap map[string]string) ([]byte, error) {
 	data := url.Values{}
 	for _, d := range endpoint.Data {
-		if len(d.Input) > 0 {
-			data.Set(d.Key, inputMap[d.Input])
-		} else {
-			data.Set(d.Key, d.Value)
-		}
+		data.Set(d.Key, replaceInputs(d.Value, inputMap))
 	}
 
 	// In case endpoints at different urls need to be used,
@@ -202,20 +200,7 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 	}
 
 	for _, h := range endpoint.Headers {
-		if len(h.Value) > 0 {
-			refreshTokenReq.Header.Add(h.Key, h.Value)
-
-		} else {
-			keyCheck := regexp.MustCompile(`(#[[:alnum:]+\-*_*]+#)`)
-			keyMatch := keyCheck.FindStringSubmatch(h.Input)
-			if len(keyMatch) > 0 {
-				for _, m := range keyMatch[1:] {
-					replace := m[1 : len(m)-1]
-					replaced := strings.Replace(h.Input, m, inputMap[replace], -1)
-					refreshTokenReq.Header.Add(h.Key, replaced)
-				}
-			}
-		}
+		refreshTokenReq.Header.Add(h.Key, replaceInputs(h.Value, inputMap))
 	}
 
 	if refreshResp, err := c.Do(refreshTokenReq); err != nil {
@@ -230,16 +215,28 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 			json.Unmarshal(refreshBody, &body)
 
 			for _, f := range endpoint.Failures {
-				if f.Validation == "equals" {
-					if body[f.Key] == f.Value {
-						fmt.Println(url + endpoint.Path + ": " + f.Message)
-						return nil, nil
+				failureString := url + endpoint.Path + ": " + f.Message
+				failed := false
+
+				if f.Validation == "status" {
+					failed = strings.Contains(refreshResp.Status, f.Value)
+
+				} else {
+					if f.Valuemessage && body[f.Key] != nil {
+						failureString += body[f.Key].(string)
 					}
-				} else if f.Validation == "presence" {
-					if body[f.Key] != nil {
-						fmt.Println(url + endpoint.Path + ": " + f.Message + body[f.Key].(string))
-						return nil, nil
+
+					if f.Validation == "equals" {
+						failed = (body[f.Key] == f.Value)
+
+					} else if f.Validation == "presence" {
+						failed = (body[f.Key] != nil)
 					}
+				}
+
+				if failed {
+					fmt.Println(failureString)
+					return nil, nil
 				}
 			}
 
@@ -251,6 +248,20 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 			return refreshBody, nil
 		}
 	}
+}
+
+func replaceInputs(value string, inputMap map[string]string) string {
+	keyCheck := regexp.MustCompile(`(#[[:alnum:]+\-*_*]+#)`)
+	keyMatch := keyCheck.FindStringSubmatch(value)
+
+	replaced := value
+	if len(keyMatch) > 0 {
+		for _, m := range keyMatch[1:] {
+			replace := m[1 : len(m)-1]
+			replaced = strings.Replace(replaced, m, inputMap[replace], -1)
+		}
+	}
+	return replaced
 }
 
 func getObject(mapslice yaml.MapSlice, key string) yaml.MapSlice {
@@ -282,23 +293,28 @@ func getValue(mapslice yaml.MapSlice, key string) interface{} {
 
 // Authenticate fulfils the backend interface
 func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
-	if requestToAuth.Header.Get("Authorization") == "" {
-		// No Token, Unauthorized response
-		return failAuth(false, nil)
-	}
-	authHeader := strings.Split(requestToAuth.Header.Get("Authorization"), " ")
-	if len(authHeader) != 2 || authHeader[0] != "Bearer" {
-		return failAuth(false, errors.New("Authorization token not properly formatted"))
-	}
+	reauth := getObject(SecretsMap, "reauth")
 	resultsMap := map[string]string{}
-	resultsMap["client_token"] = authHeader[1]
+
+	//TODO configure authorization check
+	auth := getValue(reauth, "client_authorization").(bool)
+	if auth {
+		if requestToAuth.Header.Get("Authorization") == "" {
+			// No Token, Unauthorized response
+			return failAuth(false, nil)
+		}
+		authHeader := strings.Split(requestToAuth.Header.Get("Authorization"), " ")
+		if len(authHeader) != 2 || authHeader[0] != "Bearer" {
+			return failAuth(false, errors.New("Authorization token not properly formatted"))
+		}
+		resultsMap["client_token"] = authHeader[1]
+	}
 
 	c := &http.Client{Timeout: h.timeout}
 	if !h.followRedirects {
 		c.CheckRedirect = noRedirectsPolicy
 	}
 
-	reauth := getObject(SecretsMap, "reauth")
 	reauthEndpoints := getArray(reauth, "endpoints")
 	endpointData, err := yaml.Marshal(reauthEndpoints)
 	if err != nil {
@@ -368,16 +384,16 @@ type Endpoint struct {
 }
 
 type Failure struct {
-	Validation string
-	Key        string
-	Value      string
-	Message    string
+	Validation   string
+	Key          string
+	Value        string
+	Message      string
+	Valuemessage bool
 }
 
 type DataObject struct {
 	Key   string
 	Value string
-	Input string
 }
 
 func failAuth(result bool, err error) (bool, error) {
