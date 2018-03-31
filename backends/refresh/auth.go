@@ -40,10 +40,8 @@ import (
 	"time"
 
 	"github.com/allegro/bigcache"
-
 	"github.com/fellou89/caddy-reauth/backend"
-
-	. "github.com/startsmartlabs/caddy-secrets"
+	"github.com/startsmartlabs/caddy-secrets"
 )
 
 // Backend name
@@ -264,40 +262,13 @@ func replaceInputs(value string, inputMap map[string]string) string {
 	return replaced
 }
 
-func getObject(mapslice yaml.MapSlice, key string) yaml.MapSlice {
-	for _, s := range mapslice {
-		if s.Key == key {
-			return s.Value.(yaml.MapSlice)
-		}
-	}
-	return nil
-}
-
-func getArray(mapslice yaml.MapSlice, key string) []interface{} {
-	for _, s := range mapslice {
-		if s.Key == key {
-			return s.Value.([]interface{})
-		}
-	}
-	return nil
-}
-
-func getValue(mapslice yaml.MapSlice, key string) interface{} {
-	for _, s := range mapslice {
-		if s.Key == key {
-			return s.Value
-		}
-	}
-	return nil
-}
-
 // Authenticate fulfils the backend interface
 func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
-	reauth := getObject(SecretsMap, "reauth")
+	reauth := secrets.GetObject(secrets.SecretsMap, "reauth")
 	resultsMap := map[string]string{}
 
 	//TODO configure authorization check
-	auth := getValue(reauth, "client_authorization").(bool)
+	auth := secrets.GetValue(reauth, "client_authorization").(bool)
 	if auth {
 		if requestToAuth.Header.Get("Authorization") == "" {
 			// No Token, Unauthorized response
@@ -315,7 +286,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		c.CheckRedirect = noRedirectsPolicy
 	}
 
-	reauthEndpoints := getArray(reauth, "endpoints")
+	reauthEndpoints := secrets.GetArray(reauth, "endpoints")
 	endpointData, err := yaml.Marshal(reauthEndpoints)
 	if err != nil {
 		return failAuth(false, errors.New("Endpoints yaml not setup properly in secrets file"))
@@ -360,7 +331,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		}
 	}
 
-	resultkey := getValue(reauth, "resultkey").(string)
+	resultkey := secrets.GetValue(reauth, "resultkey").(string)
 	if len(resultkey) > 0 {
 		requestToAuth.ParseForm()
 		requestToAuth.Form[resultkey] = []string{resultsMap[endpoints[len(endpoints)-1].Name]}

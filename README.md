@@ -96,12 +96,12 @@ Parameters for this backend:
 
 Example
 
-Caddyfile
+- Caddyfile
 ```
         refresh url=https://example.com,skipverify=true,timeout=5s,lifewindow=3h,cleanwindow=1s
 ```
 
-Secrets
+- Secrets
 ```
 reauth:
   authorization: true                                 # authorization bool (required) - whether to check for Authorization header,
