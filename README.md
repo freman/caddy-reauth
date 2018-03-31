@@ -157,7 +157,8 @@ reauth:
           value: 401
           valuemessage: false
           message: "Security context unauthorized"
-  resultkey: security_context                         # last response in endpoint request chain is stored under the value of 'resultkey'
+  resultkey: security_context                         # last endpoint response stored in 'ResultsMap' is passed down caddy filter chain
+                                                          in a query param with the key named after 'resultkey' value
 ```
 
 
