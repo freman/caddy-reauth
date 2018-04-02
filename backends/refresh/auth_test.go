@@ -1,10 +1,6 @@
 package refresh
 
 import (
-	// "bytes"
-	// "io/ioutil"
-	// "os/exec"
-	// "regexp"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -17,7 +13,6 @@ import (
 
 	"github.com/allegro/bigcache"
 	"github.com/dgrijalva/jwt-go"
-	// "github.com/satori/go.uuid"
 	"github.com/startsmartlabs/caddy-secrets"
 	"gopkg.in/yaml.v2"
 )
@@ -36,74 +31,6 @@ var token string
 func init() {
 	token = "asdf"
 }
-
-// 	cmd := exec.Command("/bin/sh", "-c", "go run auth_endpoint/test.go")
-// 	var out bytes.Buffer
-// 	cmd.Stdout = &out
-// 	var stderr bytes.Buffer
-// 	cmd.Stderr = &stderr
-//
-// 	go func() {
-// 		err := cmd.Run()
-// 		if err != nil {
-// 			fmt.Println(err.Error() + " : " + stderr.String())
-// 		}
-// 	}()
-// 	time.Sleep(10 * time.Second)
-//
-// 	refreshToken, err := GenerateAccessToken()
-//
-// 	client := &http.Client{}
-//
-// 	req, err := http.NewRequest("GET", "http://localhost:8081/pre_prod/aqfer/auth/v1/access_token?grant_type=refresh_token&refresh_token="+refreshToken, nil)
-// 	if err != nil {
-// 		fmt.Println(err)
-// 	}
-//
-// 	resp, err := client.Do(req)
-// 	if err != nil {
-// 		fmt.Println(err)
-// 	}
-// 	defer resp.Body.Close()
-//
-// 	body, err := ioutil.ReadAll(resp.Body)
-// 	if err != nil {
-// 		fmt.Println(err)
-// 	}
-//
-// 	containerExp := regexp.MustCompile(".*\"jwt_token\": \"([A-Za-z0-9\\.\\-_]+)\",.*")
-//
-// 	match := containerExp.FindStringSubmatch(string(body))
-// 	token = match[1]
-// 	cmd.Process.Kill()
-// }
-
-// func GenerateAccessToken() (string, error) {
-// 	now := time.Now().Unix()
-// 	uuid, _ := uuid.NewV1()
-// 	claims := Claims{
-// 		StandardClaims: jwt.StandardClaims{
-// 			Id:        uuid.String(),
-// 			IssuedAt:  now,
-// 			ExpiresAt: now + 7200,
-// 		},
-// 		User:  "test",
-// 		Email: "test@user.com",
-// 		Scope: []string{"asdf"},
-// 		Type:  "access_token",
-// 		Roles: []string{},
-// 	}
-// 	tkn, err := mkJwtToken("testkey", claims)
-// 	if err == nil {
-// 		return tkn, nil
-// 	}
-// 	return "", err
-// }
-
-// func mkJwtToken(key string, claims Claims) (string, error) {
-// 	tkn := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-// 	return tkn.SignedString([]byte(key))
-// }
 
 func authTokenCheck(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
