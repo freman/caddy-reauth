@@ -176,6 +176,8 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 
 	} else if endpoint.Method == "GET" {
 		refreshTokenReq, err = http.NewRequest(endpoint.Method, url+endpoint.Path+"?"+data.Encode(), nil)
+	} else {
+		return nil, errors.New("Endpoint had an unhandled method")
 	}
 	if err != nil {
 		return nil, err
@@ -331,10 +333,12 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		}
 	}
 
-	resultkey := secrets.GetValue(reauth, "resultkey").(string)
-	if len(resultkey) > 0 {
-		requestToAuth.ParseForm()
-		requestToAuth.Form[resultkey] = []string{resultsMap[endpoints[len(endpoints)-1].Name]}
+	if secrets.FindKey(reauth, "resultkey") {
+		resultkey := secrets.GetValue(reauth, "resultkey").(string)
+		if len(resultkey) > 0 {
+			requestToAuth.ParseForm()
+			requestToAuth.Form[resultkey] = []string{resultsMap[endpoints[len(endpoints)-1].Name]}
+		}
 	}
 
 	return true, nil

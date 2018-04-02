@@ -111,7 +111,7 @@ reauth:
     - name: refresh                                   # endpoint of name 'refresh' (required)
       url: null                                       
       path: "/access_token"
-      method: POST
+      method: POST                                    # auth request method (required) - at the moment only POST and GET are handled (value must be in caps)
       data:                                           # data array (required)
         - key: grant_type
           value: refresh_token
