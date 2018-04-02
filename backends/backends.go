@@ -25,11 +25,11 @@
 package backends
 
 import (
-	_ "github.com/fellou89/caddy-reauth/backends/gitlabci"
-	_ "github.com/fellou89/caddy-reauth/backends/ldap"
-	_ "github.com/fellou89/caddy-reauth/backends/refresh"
-	_ "github.com/fellou89/caddy-reauth/backends/simple"
-	_ "github.com/fellou89/caddy-reauth/backends/upstream"
+	_ "github.com/freman/caddy-reauth/backends/gitlabci"
+	_ "github.com/freman/caddy-reauth/backends/ldap"
+	_ "github.com/freman/caddy-reauth/backends/refresh"
+	_ "github.com/freman/caddy-reauth/backends/simple"
+	_ "github.com/freman/caddy-reauth/backends/upstream"
 )
 
 // This page intentionally left blank ;)

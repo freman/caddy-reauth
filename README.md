@@ -39,11 +39,11 @@ The core of the plugin supports the following arguments:
 
 Example:
 ```
-        reauth {
-          path /
-          except /public
-          except /not_so_secret
-        }
+	reauth {
+		path /
+		except /public
+		except /not_so_secret
+	}
 ```
 
 Along with these two arguments you are required to specify at least one backend.
@@ -56,7 +56,7 @@ This is the simplest plugin, taking just a list of username=password[,username=p
 
 Example:
 ```
-        simple user1=password1,user2=password2
+	simple user1=password1,user2=password2
 ```
 
 ### Upstream
@@ -75,7 +75,7 @@ Parameters for this backend:
 
 Example
 ```
-        upstream url=https://google.com,skipverify=true,timeout=5s
+	upstream url=https://google.com,skipverify=true,timeout=5s
 ```
 
 ### Refresh
@@ -99,7 +99,7 @@ Examples
 
 - Caddyfile
 ```
-        refresh url=https://example.com,skipverify=true,timeout=5s,lifewindow=3h,cleanwindow=1s
+	refresh url=https://example.com,skipverify=true,timeout=5s,lifewindow=3h,cleanwindow=1s
 ```
 
 - Secrets file
@@ -176,13 +176,13 @@ Parameters for this backend:
 
 Example
 ```
-  gitlab url=https://gitlab.example.com,skipverify=true,timeout=5s
+	gitlab url=https://gitlab.example.com,skipverify=true,timeout=5s
 ```
 
 Example of logging in via gitlab-ci.yml
 
 ```
-  docker login docker.example.com -u "$CI_PROJECT_PATH" -p "$CI_BUILD_TOKEN"
+	docker login docker.example.com -u "$CI_PROJECT_PATH" -p "$CI_BUILD_TOKEN"
 ```
 
 ### LDAP
@@ -222,7 +222,7 @@ Parameters for this handler:
 
 Example
 ```
-  failure httpbasic realm=example.org
+	failure httpbasic realm=example.org
 ```
 
 ### Redirect
@@ -238,7 +238,7 @@ Parameters for this handler:
 
 Example
 ```
-  failure redirect target=example.org,code=303
+	failure redirect target=example.org,code=303
 ```
 
 Example with uri
@@ -258,7 +258,7 @@ Parameters for this handler:
 
 Example
 ```
-  failure status code=418
+	failure status code=418
 ```
 
 ## Todo

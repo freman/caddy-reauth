@@ -91,7 +91,9 @@ RULE:
 				return h.next.ServeHTTP(w, r)
 			}
 		}
+
 		return p.onfail.Handle(w, r)
 	}
+
 	return h.next.ServeHTTP(w, r)
 }
