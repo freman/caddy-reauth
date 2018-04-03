@@ -183,19 +183,15 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 		return nil, err
 	}
 
-	if endpoint.Skipverify {
-		if refreshTokenReq.URL.Scheme == "https" && h.insecureSkipVerify {
-			c.Transport = &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			}
+	if endpoint.Skipverify && refreshTokenReq.URL.Scheme == "https" && h.insecureSkipVerify {
+		c.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 	}
 
-	if endpoint.Cookies {
-		if h.passCookies {
-			for _, c := range requestToAuth.Cookies() {
-				refreshTokenReq.AddCookie(c)
-			}
+	if endpoint.Cookies && h.passCookies {
+		for _, c := range requestToAuth.Cookies() {
+			refreshTokenReq.AddCookie(c)
 		}
 	}
 
@@ -260,8 +256,11 @@ func replaceInputs(value string, inputMap map[string]string) string {
 			replace := m[1 : len(m)-1]
 			replaced = strings.Replace(replaced, m, inputMap[replace], -1)
 		}
+		return replaceInputs(replaced, inputMap)
+
+	} else {
+		return replaced
 	}
-	return replaced
 }
 
 // Authenticate fulfils the backend interface
