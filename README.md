@@ -148,12 +148,17 @@ Parameters for this handler:
 
 | Parameter-Name    | Description                                                                              |
 | ------------------|------------------------------------------------------------------------------------------|
-| target            | target url for the redirection (required)                                                |
+| target            | target url for the redirection, supports {uri} for redirection (required)                |
 | code              | the http status code to use, defaults to 302                                             |
 
 Example
 ```
 	failure redirect target=example.org,code=303
+```
+
+Example with uri
+```
+	failure redirect target=/auth?redir={uri},code=303
 ```
 
 ### Status
