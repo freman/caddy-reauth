@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/freman/caddy-reauth/backend"
 )
@@ -34,8 +35,22 @@ type httpRedirectOnFailure struct {
 }
 
 func (h *httpRedirectOnFailure) Handle(w http.ResponseWriter, r *http.Request) (int, error) {
-	w.Header().Add("Location", h.target.String())
-	http.Redirect(w, r, h.target.String(), h.code)
+	uri := r.URL
+	uri.Host = ""
+	uri.Scheme = ""
+
+	// Handle redirection back to hosts that aren't the auth server.
+	if h.target.Host != "" && h.target.Host != r.Host {
+		uri.Host = r.Host
+		uri.Scheme = "http"
+		if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+			uri.Scheme = "https"
+		}
+	}
+
+	redirect := strings.Replace(h.target.String(), "{uri}", url.QueryEscape(uri.String()), -1)
+	w.Header().Add("Location", redirect)
+	http.Redirect(w, r, redirect, h.code)
 	return h.code, nil
 }
 

@@ -119,6 +119,69 @@ func TestRedirectAuthFailure(t *testing.T) {
 	}
 }
 
+func TestRedirectAuthFailureTemplate(t *testing.T) {
+	c := failureHandlers["redirect"]
+	if c == nil {
+		t.Fatal("constructor should not be nil")
+	}
+
+	f, err := c("target=http://example.com/auth?redir={uri}")
+	if err != nil {
+		t.Fatal("unexpected error", err.Error())
+	}
+	r, _ := http.NewRequest(http.MethodGet, "http://example.com/deep/pages?are=deep", nil)
+	w := httptest.NewRecorder()
+	_, err = f.Handle(w, r)
+
+	if expect, got := `http://example.com/auth?redir=%2Fdeep%2Fpages%3Fare%3Ddeep`, w.Header().Get("Location"); expect != got {
+		t.Errorf("expected %s got %s", expect, got)
+	}
+
+	r.Host = "example.org"
+	w = httptest.NewRecorder()
+	_, err = f.Handle(w, r)
+
+	if expect, got := `http://example.com/auth?redir=http%3A%2F%2Fexample.org%2Fdeep%2Fpages%3Fare%3Ddeep`, w.Header().Get("Location"); expect != got {
+		t.Errorf("expected %s got %s", expect, got)
+	}
+
+	r.Header.Add("X-Forwarded-Proto", "https")
+	w = httptest.NewRecorder()
+	_, err = f.Handle(w, r)
+
+	if expect, got := `http://example.com/auth?redir=https%3A%2F%2Fexample.org%2Fdeep%2Fpages%3Fare%3Ddeep`, w.Header().Get("Location"); expect != got {
+		t.Errorf("expected %s got %s", expect, got)
+	}
+
+	f, err = c("target=/auth?redir={uri}")
+	if err != nil {
+		t.Fatal("unexpected error", err.Error())
+	}
+	r, _ = http.NewRequest(http.MethodGet, "http://example.com/deep/pages?are=deep", nil)
+	w = httptest.NewRecorder()
+	_, err = f.Handle(w, r)
+
+	if expect, got := `/auth?redir=%2Fdeep%2Fpages%3Fare%3Ddeep`, w.Header().Get("Location"); expect != got {
+		t.Errorf("expected %s got %s", expect, got)
+	}
+
+	r.Host = "example.org"
+	w = httptest.NewRecorder()
+	_, err = f.Handle(w, r)
+
+	if expect, got := `/auth?redir=%2Fdeep%2Fpages%3Fare%3Ddeep`, w.Header().Get("Location"); expect != got {
+		t.Errorf("expected %s got %s", expect, got)
+	}
+
+	r.Header.Add("X-Forwarded-Proto", "https")
+	w = httptest.NewRecorder()
+	_, err = f.Handle(w, r)
+
+	if expect, got := `/auth?redir=%2Fdeep%2Fpages%3Fare%3Ddeep`, w.Header().Get("Location"); expect != got {
+		t.Errorf("expected %s got %s", expect, got)
+	}
+}
+
 func TestCodeAuthFailure(t *testing.T) {
 	c := failureHandlers["status"]
 	if c == nil {
