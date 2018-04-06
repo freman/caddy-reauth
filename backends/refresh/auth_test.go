@@ -61,25 +61,21 @@ func authTokenCheck(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("%+v", r.Header)))
 		return
 
+	} else if strings.Contains(r.URL.String(), "failure_status") {
+		w.WriteHeader(500)
+		return
+
+	} else if strings.Contains(r.URL.String(), "failure_equality") {
+		w.WriteHeader(200)
+		w.Write([]byte("{\"message\": \"something happened\"}"))
+		return
+
+	} else if strings.Contains(r.URL.String(), "failure_presence") {
+		w.WriteHeader(200)
+		w.Write([]byte("{\"error\": \"something happened\"}"))
+		return
+
 	}
-	// if err != nil {
-	// 	w.WriteHeader(401)
-	// 	w.Write([]byte("{\"error\": \"" + err.Error() + "\"}"))
-	// 	return
-
-	// } else if err != nil {
-	// 	w.WriteHeader(401)
-	// 	w.Write([]byte("{\"message\": \"Forbidden\"}"))
-	// 	return
-
-	// } else {
-	// 	err = claims.Valid()
-	// 	if err != nil {
-	// 		w.WriteHeader(401)
-	// 		w.Write([]byte("{\"message\": \"Forbidden\"}"))
-	// 		return
-	// 	}
-	// }
 
 	w.WriteHeader(200)
 	w.Write([]byte("{\"jwt_token\": \"" + token + "\"}"))
@@ -418,10 +414,81 @@ func TestRefreshRequestObject(t *testing.T) {
 	refresh.refreshUrl = uri.String()
 
 	t.Log("Testing client.Do error will pass error down")
+	refresh.refreshUrl = "error"
+	_, err = refresh.refreshRequestObject(c, r, Endpoint{Method: "POST"}, map[string]string{})
+	if err == nil {
+		t.Errorf("Expected an error to come back from Do")
+	}
+	if !strings.Contains(err.Error(), "Error on endpoint request") {
+		t.Errorf("Expected error passed down should be from endpoint request")
+	}
+	refresh.refreshUrl = uri.String()
 
-	t.Log("Testing resp.Body read error will pass error down")
+	t.Log("Testing failure identified in response body by status")
+	refresh.refreshUrl += "/failure_status"
+	failure, err := refresh.refreshRequestObject(c, r, Endpoint{
+		Method: "POST",
+		Failures: []Failure{Failure{
+			Validation:   "status",
+			Key:          "",
+			Value:        "500",
+			Message:      "There was a 500",
+			Valuemessage: false,
+		}}}, map[string]string{})
 
-	t.Log("Testing failure identified in response body")
+	if failure != nil {
+		t.Errorf("Request failure should've returned a nil response object")
+	}
+	if !strings.Contains(err.Error(), "There was a 500") {
+		t.Errorf("Expected Failure message to be returned")
+	}
+	refresh.refreshUrl = uri.String()
+
+	t.Log("Testing failure identified in response body by body key presence")
+	refresh.refreshUrl += "/failure_presence"
+	failure, err = refresh.refreshRequestObject(c, r, Endpoint{
+		Method: "POST",
+		Failures: []Failure{Failure{
+			Validation:   "presence",
+			Key:          "error",
+			Value:        "",
+			Message:      "There was an error",
+			Valuemessage: false,
+		}}}, map[string]string{})
+
+	if failure != nil {
+		t.Errorf("Request failure should've returned a nil response object")
+	}
+	if !strings.Contains(err.Error(), "There was an error") {
+		t.Errorf("Expected Failure message to be returned")
+	}
+	refresh.refreshUrl = uri.String()
+
+	t.Log("Testing failure identified in response body by body key value equality")
+	refresh.refreshUrl += "/failure_equality"
+	failure, err = refresh.refreshRequestObject(c, r, Endpoint{
+		Method: "POST",
+		Failures: []Failure{Failure{
+			Validation:   "equality",
+			Key:          "message",
+			Value:        "something happened",
+			Message:      "There was an error",
+			Valuemessage: false,
+		}}}, map[string]string{})
+
+	if failure != nil {
+		t.Errorf("Request failure should've returned a nil response object")
+	}
+	if !strings.Contains(err.Error(), "There was an error") {
+		t.Errorf("Expected Failure message to be returned")
+	}
+	refresh.refreshUrl = uri.String()
 
 	t.Log("Testing response key found in response body")
+	refresh.refreshUrl += "/failure_equality"
+	message, err := refresh.refreshRequestObject(c, r, Endpoint{Method: "POST", Responsekey: "message"}, map[string]string{})
+
+	if !strings.Contains(string(message), "something happened") {
+		t.Errorf("Value in response object was not found")
+	}
 }

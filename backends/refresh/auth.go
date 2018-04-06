@@ -1,7 +1,7 @@
 /*
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Shannon Wynter
+ * Copyright (c) 2017 Alfredo Uribe
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +27,6 @@ package refresh
 import (
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -200,15 +199,15 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 	}
 
 	if refreshResp, err := c.Do(refreshTokenReq); err != nil {
-		return nil, errors.Wrap(err, "Error requesting access token")
+		return nil, errors.Wrap(err, "Error on endpoint request")
 
 	} else {
-		if refreshBody, err := ioutil.ReadAll(refreshResp.Body); err != nil {
-			return nil, errors.Wrap(err, "Error reading response body from access token refresh")
+		if responseBody, err := ioutil.ReadAll(refreshResp.Body); err != nil {
+			return nil, errors.Wrap(err, "Error reading response body from endpoint request")
 
 		} else {
 			var body map[string]interface{}
-			json.Unmarshal(refreshBody, &body)
+			json.Unmarshal(responseBody, &body)
 
 			for _, f := range endpoint.Failures {
 				failureString := url + endpoint.Path + ": " + f.Message
@@ -222,7 +221,7 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 						failureString += body[f.Key].(string)
 					}
 
-					if f.Validation == "equals" {
+					if f.Validation == "equality" {
 						failed = (body[f.Key] == f.Value)
 
 					} else if f.Validation == "presence" {
@@ -231,8 +230,7 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 				}
 
 				if failed {
-					fmt.Println(failureString)
-					return nil, nil
+					return nil, errors.New(failureString)
 				}
 			}
 
@@ -241,7 +239,7 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 					return []byte(body[endpoint.Responsekey].(string)), nil
 				}
 			}
-			return refreshBody, nil
+			return responseBody, nil
 		}
 	}
 }
