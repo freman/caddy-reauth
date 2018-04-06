@@ -450,8 +450,8 @@ func TestRefreshRequestObject(t *testing.T) {
 			Valuemessage: false,
 		}}}, map[string]string{})
 
-	if failure != nil {
-		t.Errorf("Request failure should've returned a nil response object")
+	if failure == nil {
+		t.Errorf("Expected response object to be returned when endpoint Failure is caugh")
 	}
 	if !strings.Contains(err.Error(), "There was a 500") {
 		t.Errorf("Expected Failure message to be returned")
@@ -470,8 +470,8 @@ func TestRefreshRequestObject(t *testing.T) {
 			Valuemessage: false,
 		}}}, map[string]string{})
 
-	if failure != nil {
-		t.Errorf("Request failure should've returned a nil response object")
+	if failure == nil {
+		t.Errorf("Expected response object to be returned when endpoint Failure is caugh")
 	}
 	if !strings.Contains(err.Error(), "There was an error") {
 		t.Errorf("Expected Failure message to be returned")
@@ -507,8 +507,8 @@ func TestRefreshRequestObject(t *testing.T) {
 			Valuemessage: false,
 		}}}, map[string]string{})
 
-	if failure != nil {
-		t.Errorf("Request failure should've returned a nil response object")
+	if failure == nil {
+		t.Errorf("Expected response object to be returned when endpoint Failure is caugh")
 	}
 	if !strings.Contains(err.Error(), "There was an error") {
 		t.Errorf("Expected Failure message to be returned")

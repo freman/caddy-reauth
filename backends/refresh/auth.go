@@ -240,7 +240,7 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 		}
 
 		if failed {
-			return nil, errors.New(failureString)
+			return responseBody, errors.New(failureString)
 		}
 	}
 
@@ -267,16 +267,13 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	reauth := secrets.GetObject(secrets.SecretsMap, "reauth")
 	resultsMap := map[string]string{}
 
-	//TODO configure authorization check
-	auth := secrets.GetValue(reauth, "client_authorization").(bool)
-	if auth {
-		if requestToAuth.Header.Get("Authorization") == "" {
-			// No Token, Unauthorized response
-			return failAuth(false, nil)
+	if secrets.GetValue(reauth, "client_authorization").(bool) {
+		if len(requestToAuth.Header.Get("Authorization")) == 0 {
+			return failAuth(nil)
 		}
 		authHeader := strings.Split(requestToAuth.Header.Get("Authorization"), " ")
 		if len(authHeader) != 2 || authHeader[0] != "Bearer" {
-			return failAuth(false, errors.New("Authorization token not properly formatted"))
+			return failAuth(errors.New("Authorization token not properly formatted"))
 		}
 		resultsMap["client_token"] = authHeader[1]
 	}
@@ -289,7 +286,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	reauthEndpoints := secrets.GetArray(reauth, "endpoints")
 	endpointData, err := yaml.Marshal(reauthEndpoints)
 	if err != nil {
-		return failAuth(false, errors.New("Endpoints yaml not setup properly in secrets file"))
+		return failAuth(errors.New("Endpoints yaml not setup properly in secrets file"))
 	}
 	var endpoints []Endpoint
 	yaml.Unmarshal(endpointData, &endpoints)
@@ -311,22 +308,30 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				// request data to put in cache when entry is not found
-				if responseData, err := h.refreshRequestObject(c, requestToAuth, endpoint, resultsMap); err != nil {
-					return failAuth(false, err)
-
-				} else {
+				responseData, err := h.refreshRequestObject(c, requestToAuth, endpoint, resultsMap)
+				if err != nil {
 					if responseData == nil {
-						return false, nil
+						// error and empty response signal an auth fail due to server error (500)
+						return failAuth(err)
 
 					} else {
-						resultsMap[endpoint.Name] = string(responseData)
-						h.refreshCache.Set(resultsMap[endpoint.Cachekey], responseData)
+						// error and response signal an auth fail due to unauthorized response from server
+						// Authorize returns false and no error, so that caddyfile configured response is given
+						failAuth(err)
+						return false, nil
 					}
+
+				} else {
+					// nil error and response signal successful authentication
+					resultsMap[endpoint.Name] = string(responseData)
+					h.refreshCache.Set(resultsMap[endpoint.Cachekey], responseData)
 				}
 			} else {
-				return failAuth(false, err)
+				// error different than not found cache key cause server error (500)
+				return failAuth(err)
 			}
 		} else {
+			// value found in cache sets it directly to resultsMap
 			resultsMap[endpoint.Name] = string(entry)
 		}
 	}
@@ -369,9 +374,9 @@ type DataObject struct {
 	Value string
 }
 
-func failAuth(result bool, err error) (bool, error) {
+func failAuth(err error) (bool, error) {
 	if err != nil {
 		log.Println(err.Error())
 	}
-	return result, err
+	return false, err
 }
