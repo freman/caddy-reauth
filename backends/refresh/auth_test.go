@@ -37,32 +37,37 @@ func authTokenCheck(w http.ResponseWriter, r *http.Request) {
 
 	if strings.Contains(r.URL.String(), "return_query") {
 		w.WriteHeader(200)
-		w.Write([]byte(r.URL.String()))
+		w.Write([]byte("{\"message\": \"" + r.URL.String() + "\"}"))
 		return
 
 	} else if strings.Contains(r.URL.String(), "return_form") {
 		bodyBytes, _ := ioutil.ReadAll(r.Body)
 		w.WriteHeader(200)
-		w.Write(bodyBytes)
+		w.Write([]byte("{\"message\": \"" + string(bodyBytes) + "\"}"))
 		return
 
 	} else if strings.Contains(r.URL.String(), "return_host") {
 		w.WriteHeader(200)
-		w.Write([]byte(r.Host))
+		w.Write([]byte("{\"message\": \"" + r.Host + "\"}"))
 		return
 
 	} else if strings.Contains(r.URL.String(), "return_cookies") {
 		w.WriteHeader(200)
-		w.Write([]byte(fmt.Sprintf("%+v", r.Cookies())))
+		w.Write([]byte("{\"message\": \"" + fmt.Sprintf("%+v", r.Cookies()) + "\"}"))
 		return
 
 	} else if strings.Contains(r.URL.String(), "return_headers") {
 		w.WriteHeader(200)
-		w.Write([]byte(fmt.Sprintf("%+v", r.Header)))
+		w.Write([]byte("{\"message\": \"" + fmt.Sprintf("%+v", r.Header) + "\"}"))
+		return
+
+	} else if strings.Contains(r.URL.String(), "eof") {
+		w.WriteHeader(500)
 		return
 
 	} else if strings.Contains(r.URL.String(), "failure_status") {
 		w.WriteHeader(500)
+		w.Write([]byte("{\"error\": \"something happened\"}"))
 		return
 
 	} else if strings.Contains(r.URL.String(), "failure_equality") {
@@ -190,7 +195,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 		},
 		{ // 4
 			`With valid arguments`,
-			`url=http://google.com,timeout=5s,skipverify=true,follow=true,filewindow=1m`,
+			`url=http://google.com,timeout=5s,skipverify=true,follow=true,lifetime=1m`,
 			&Refresh{refreshUrl: url, timeout: 5 * time.Second, insecureSkipVerify: true, followRedirects: true, refreshCache: refreshCache},
 			nil,
 		},
@@ -231,14 +236,14 @@ func TestAuthenticateConstructor(t *testing.T) {
 			errors.New(`strconv.ParseBool: parsing "yay": invalid syntax`),
 		},
 		{ // 11
-			`With invalid filewindow duration`,
-			`url=http://google.com,lifewindow=5j`,
+			`With invalid lifetime duration`,
+			`url=http://google.com,lifetime=5j`,
 			nil,
 			errors.New(`time: unknown unit j in duration 5j`),
 		},
 		{ // 12
-			`With invalid cleanwindow duration`,
-			`url=http://google.com,cleanwindow=5j`,
+			`With invalid cleaninterval duration`,
+			`url=http://google.com,cleaninterval=5j`,
 			nil,
 			errors.New(`time: unknown unit j in duration 5j`),
 		},
@@ -333,7 +338,7 @@ func TestRefreshRequestObject(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
 	}
-	if string(query) != "/return_query?one=asdf&two=fdsa" {
+	if !strings.Contains(string(query), "one=asdf") || !strings.Contains(string(query), "two=fdsa") {
 		t.Errorf("Data was not properly encoded")
 	}
 	refresh.refreshUrl = uri.String()
@@ -353,7 +358,7 @@ func TestRefreshRequestObject(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
 	}
-	if string(form) != "one=asdf&two=fdsa" {
+	if !strings.Contains(string(query), "one=asdf") || !strings.Contains(string(query), "two=fdsa") {
 		t.Errorf("Data was not properly encoded")
 	}
 	refresh.refreshUrl = uri.String()
@@ -362,12 +367,12 @@ func TestRefreshRequestObject(t *testing.T) {
 	refresh.refreshUrl += "/return_form"
 	form, err = refresh.refreshRequestObject(c, r, Endpoint{
 		Method: "POST",
-		Data:   []DataObject{DataObject{Key: "one", Value: "#asdf#___#fdsa#___asdf___#fdsa#"}},
+		Data:   []DataObject{DataObject{Key: "one", Value: "{asdf}___{fdsa}___asdf___{fdsa}"}},
 	}, map[string]string{"asdf": "replacement-value-for-asdf", "fdsa": "replacement-for-fdsa"})
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
 	}
-	if string(form) != "one=replacement-value-for-asdf___replacement-for-fdsa___asdf___replacement-for-fdsa" {
+	if !strings.Contains(string(form), "one=replacement-value-for-asdf___replacement-for-fdsa___asdf___replacement-for-fdsa") {
 		t.Errorf("Data reference was not replaced")
 	}
 	refresh.refreshUrl = uri.String()
@@ -383,7 +388,7 @@ func TestRefreshRequestObject(t *testing.T) {
 	r.AddCookie(&http.Cookie{Name: "one", Value: "asdf"})
 	refresh.refreshUrl += "/return_cookies"
 	cookies, _ := refresh.refreshRequestObject(c, r, Endpoint{Method: "POST", Cookies: true}, map[string]string{})
-	if string(cookies) != "[one=asdf]" {
+	if !strings.Contains(string(cookies), "[one=asdf]") {
 		t.Errorf("Cookies were not added to the endpoint")
 	}
 	refresh.refreshUrl = uri.String()
@@ -404,11 +409,11 @@ func TestRefreshRequestObject(t *testing.T) {
 	headers, _ = refresh.refreshRequestObject(c, r, Endpoint{
 		Method: "POST",
 		Headers: []DataObject{
-			DataObject{Key: "one", Value: "#asdf#"},
-			DataObject{Key: "two", Value: "#fdsa#"},
-			DataObject{Key: "three", Value: "#fdsa#"},
+			DataObject{Key: "one", Value: "{asdf}"},
+			DataObject{Key: "two", Value: "{fdsa}"},
+			DataObject{Key: "three", Value: "{fdsa}"},
 		}}, map[string]string{"asdf": "replacement-value-for-asdf", "fdsa": "replacement-for-fdsa"})
-	if !strings.Contains(string(headers), "replacement-value-for-asdf") || !strings.Contains(string(headers), "replacement-for-fdsa") || strings.Contains(string(headers), "#fdsa#") {
+	if !strings.Contains(string(headers), "replacement-value-for-asdf") || !strings.Contains(string(headers), "replacement-for-fdsa") || strings.Contains(string(headers), "{fdsa}") {
 		t.Errorf("Headers were not added to the endpoint")
 	}
 	refresh.refreshUrl = uri.String()
@@ -421,6 +426,15 @@ func TestRefreshRequestObject(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Error on endpoint request") {
 		t.Errorf("Expected error passed down should be from endpoint request")
+	}
+	refresh.refreshUrl = uri.String()
+
+	t.Log("Testing failure identified in response body by status")
+	refresh.refreshUrl += "/eof"
+	_, err = refresh.refreshRequestObject(c, r, Endpoint{Method: "POST"}, map[string]string{})
+
+	if !strings.Contains(err.Error(), "EOF") {
+		t.Errorf("Expected EOF on an empty body")
 	}
 	refresh.refreshUrl = uri.String()
 
@@ -464,6 +478,23 @@ func TestRefreshRequestObject(t *testing.T) {
 	}
 	refresh.refreshUrl = uri.String()
 
+	t.Log("Testing presence failure adds response value to error message")
+	refresh.refreshUrl += "/failure_presence"
+	failure, err = refresh.refreshRequestObject(c, r, Endpoint{
+		Method: "POST",
+		Failures: []Failure{Failure{
+			Validation:   "presence",
+			Key:          "error",
+			Value:        "",
+			Message:      "There was an error",
+			Valuemessage: true,
+		}}}, map[string]string{})
+
+	if !strings.Contains(err.Error(), "something happened") {
+		t.Errorf("Expected error message to have body value")
+	}
+	refresh.refreshUrl = uri.String()
+
 	t.Log("Testing failure identified in response body by body key value equality")
 	refresh.refreshUrl += "/failure_equality"
 	failure, err = refresh.refreshRequestObject(c, r, Endpoint{
@@ -481,6 +512,23 @@ func TestRefreshRequestObject(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "There was an error") {
 		t.Errorf("Expected Failure message to be returned")
+	}
+	refresh.refreshUrl = uri.String()
+
+	t.Log("Testing equality failure adds value to error message")
+	refresh.refreshUrl += "/failure_equality"
+	failure, err = refresh.refreshRequestObject(c, r, Endpoint{
+		Method: "POST",
+		Failures: []Failure{Failure{
+			Validation:   "equality",
+			Key:          "message",
+			Value:        "something happened",
+			Message:      "There was an error",
+			Valuemessage: true,
+		}}}, map[string]string{})
+
+	if !strings.Contains(err.Error(), "something happened") {
+		t.Errorf("Expected error message to have body value")
 	}
 	refresh.refreshUrl = uri.String()
 

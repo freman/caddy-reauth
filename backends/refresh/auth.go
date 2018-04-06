@@ -29,7 +29,7 @@ import (
 	"encoding/json"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -90,12 +90,12 @@ func constructor(config string) (backend.Backend, error) {
 		return nil, errors.Wrap(err, "unable to parse url "+s)
 	}
 
-	life, err := parseDurationOption(options, "lifewindow", DefaultLifeWindow)
+	life, err := parseDurationOption(options, "lifetime", DefaultLifeWindow)
 	if err != nil {
 		return nil, err
 	}
 
-	clean, err := parseDurationOption(options, "cleanwindow", DefaultCleanWindow)
+	clean, err := parseDurationOption(options, "cleaninterval", DefaultCleanWindow)
 	if err != nil {
 		return nil, err
 	}
@@ -170,11 +170,13 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 
 	var refreshTokenReq *http.Request
 	var err error
+
 	if endpoint.Method == "POST" {
 		refreshTokenReq, err = http.NewRequest(endpoint.Method, url+endpoint.Path, strings.NewReader(data.Encode()))
 
 	} else if endpoint.Method == "GET" {
 		refreshTokenReq, err = http.NewRequest(endpoint.Method, url+endpoint.Path+"?"+data.Encode(), nil)
+
 	} else {
 		return nil, errors.New("Endpoint had an unhandled method")
 	}
@@ -198,67 +200,66 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 		refreshTokenReq.Header.Add(h.Key, replaceInputs(h.Value, inputMap))
 	}
 
-	if refreshResp, err := c.Do(refreshTokenReq); err != nil {
+	refreshResp, err := c.Do(refreshTokenReq)
+	if err != nil {
 		return nil, errors.Wrap(err, "Error on endpoint request")
+	}
+	defer refreshResp.Body.Close()
 
-	} else {
-		if responseBody, err := ioutil.ReadAll(refreshResp.Body); err != nil {
-			return nil, errors.Wrap(err, "Error reading response body from endpoint request")
+	var body map[string]interface{}
+	const limit = 1000000 // Sensible limit that covers the maximum possible size of a real response plus some leeway
+
+	dec := json.NewDecoder(io.LimitReader(refreshResp.Body, limit))
+	if err := dec.Decode(&body); err != nil {
+		return nil, err
+	}
+
+	responseBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error marshaling object into JSON")
+	}
+
+	for _, f := range endpoint.Failures {
+		failureString := url + endpoint.Path + ": " + f.Message
+		failed := false
+
+		if strings.EqualFold(f.Validation, "status") {
+			failed = strings.Contains(refreshResp.Status, f.Value)
 
 		} else {
-			var body map[string]interface{}
-			json.Unmarshal(responseBody, &body)
-
-			for _, f := range endpoint.Failures {
-				failureString := url + endpoint.Path + ": " + f.Message
-				failed := false
-
-				if f.Validation == "status" {
-					failed = strings.Contains(refreshResp.Status, f.Value)
-
-				} else {
-					if f.Valuemessage && body[f.Key] != nil {
-						failureString += body[f.Key].(string)
-					}
-
-					if f.Validation == "equality" {
-						failed = (body[f.Key] == f.Value)
-
-					} else if f.Validation == "presence" {
-						failed = (body[f.Key] != nil)
-					}
-				}
-
-				if failed {
-					return nil, errors.New(failureString)
-				}
+			if f.Valuemessage && body[f.Key] != nil {
+				failureString += body[f.Key].(string)
 			}
 
-			if len(endpoint.Responsekey) > 0 {
-				if body[endpoint.Responsekey] != nil {
-					return []byte(body[endpoint.Responsekey].(string)), nil
-				}
+			if strings.EqualFold(f.Validation, "equality") {
+				failed = (body[f.Key] == f.Value)
+
+			} else if strings.EqualFold(f.Validation, "presence") {
+				failed = (body[f.Key] != nil)
 			}
-			return responseBody, nil
+		}
+
+		if failed {
+			return nil, errors.New(failureString)
 		}
 	}
+
+	if len(endpoint.Responsekey) > 0 {
+		if body[endpoint.Responsekey] != nil {
+			return []byte(body[endpoint.Responsekey].(string)), nil
+		}
+	}
+	return responseBody, nil
 }
 
+var keyCheck = regexp.MustCompile(`({[[:alnum:]+\-*_*]+})`)
+
 func replaceInputs(value string, inputMap map[string]string) string {
-	keyCheck := regexp.MustCompile(`(#[[:alnum:]+\-*_*]+#)`)
-	keyMatch := keyCheck.FindStringSubmatch(value)
-
-	replaced := value
-	if len(keyMatch) > 0 {
-		for _, m := range keyMatch[1:] {
-			replace := m[1 : len(m)-1]
-			replaced = strings.Replace(replaced, m, inputMap[replace], -1)
-		}
-		return replaceInputs(replaced, inputMap)
-
-	} else {
-		return replaced
+	keyMatch := keyCheck.FindAllStringSubmatch(value, -1)
+	for _, m := range keyMatch {
+		value = strings.Replace(value, m[0], inputMap[m[1][1:len(m[1])-1]], -1)
 	}
+	return value
 }
 
 // Authenticate fulfils the backend interface

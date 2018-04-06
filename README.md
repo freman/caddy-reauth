@@ -92,14 +92,14 @@ Parameters for this backend:
 | timeout           | request timeout (optional 1m by default, go duration syntax is supported)                |
 | follow            | follow redirects (disabled by default as redirecting to a login page might cause a 200)  |
 | cookies           | true to pass cookies to the upstream server                                              |
-| lifewindow        | time interval that a file cached by this module will remain valid (default 3 hours)      |
-| cleanwindow       | time interval to clean cache of expired entries (default 1 second)                       |
+| lifetime          | time interval that a file cached by this module will remain valid (default 3 hours)      |
+| cleaninterval     | time interval to clean cache of expired entries (default 1 second)                       |
 
 Examples
 
 - Caddyfile
 ```
-	refresh url=https://example.com,skipverify=true,timeout=5s,lifewindow=3h,cleanwindow=1s
+	refresh url=https://example.com,skipverify=true,timeout=5s,lifetime=3h,cleaninterval=1s
 ```
 
 - Secrets file
@@ -125,8 +125,8 @@ reauth:
       cookies: true
       responsekey: jwt_token
       failures:
-        - validation: equals                          # there are 3 types of validation, 'equals' will have auth fail if
-          key: message                                # response body value under failure object key equals failure object value
+        - validation: equality                        # there are 3 types of validation, 'equality' will have auth fail if
+          key: message                                # response body value under failure object key equality failure object value
           value: Forbidden
           valuemessage: false
           message: "Refresh access token failed"
@@ -138,11 +138,11 @@ reauth:
       method: GET                                     # request method, GET will put data params in query, POST will encode form
       data:                                           # data needed for request
         - key: access_token
-          value: "#client_token#"                     # surrounding keys with #'s will have them replaced by values in 'ResultsMap'
+          value: "{client_token}"                     # surrounding keys with {}'s will have them replaced by values in 'ResultsMap'
       cachekey: client_token                          # cache entry key
       headers:                                        # keys and values to set on endpoint request headers
         - key: Authorization                          
-          value: "Bearer #refresh#"                   # surrounding keys with #'s will have them replaced by values in 'ResultsMap' 
+          value: "Bearer {refresh}"                   # surrounding keys with {}'s will have them replaced by values in 'ResultsMap' 
       skipverify: true                                # whether endpoint request should use Caddyfile skipverify configuration
       cookies: true                                   # whether endpoint request should use Caddyfile cookies configuration
       responsekey: null                               # if set, the key will be used to pull value from endpoint response
