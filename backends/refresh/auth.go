@@ -63,6 +63,10 @@ type Refresh struct {
 	passCookies        bool
 }
 
+var reauth yaml.MapSlice
+var reauthEndpoints []interface{}
+var endpoints []Endpoint
+
 func init() {
 	err := backend.Register(Backend, constructor)
 	if err != nil {
@@ -73,6 +77,8 @@ func init() {
 func noRedirectsPolicy(req *http.Request, via []*http.Request) error {
 	return errors.New("follow redirects disabled")
 }
+
+var refreshToken string
 
 func constructor(config string) (backend.Backend, error) {
 	options, err := backend.ParseOptions(config)
@@ -135,6 +141,26 @@ func constructor(config string) (backend.Backend, error) {
 		return nil, err
 	}
 	rf.passCookies = bval
+
+	reauth = secrets.GetObject(secrets.SecretsMap, "reauth")
+	reauthEndpoints = secrets.GetArray(reauth, "endpoints")
+
+	endpointData, err := yaml.Marshal(reauthEndpoints)
+	if err != nil {
+		return nil, errors.New("Endpoints yaml not setup properly in secrets file")
+	}
+	yaml.Unmarshal(endpointData, &endpoints)
+
+	// this specific structure is needed in the secrets file to have a refresh token available
+	for _, e := range endpoints {
+		if e.Name == "refresh" {
+			for _, d := range e.Data {
+				if d.Key == "refresh_token" {
+					refreshToken = d.Value
+				}
+			}
+		}
+	}
 
 	return rf, nil
 }
@@ -264,7 +290,6 @@ func replaceInputs(value string, inputMap map[string]string) string {
 
 // Authenticate fulfils the backend interface
 func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
-	reauth := secrets.GetObject(secrets.SecretsMap, "reauth")
 	resultsMap := map[string]string{}
 
 	if secrets.GetValue(reauth, "client_authorization").(bool) {
@@ -283,24 +308,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		c.CheckRedirect = noRedirectsPolicy
 	}
 
-	reauthEndpoints := secrets.GetArray(reauth, "endpoints")
-	endpointData, err := yaml.Marshal(reauthEndpoints)
-	if err != nil {
-		return failAuth(errors.New("Endpoints yaml not setup properly in secrets file"))
-	}
-	var endpoints []Endpoint
-	yaml.Unmarshal(endpointData, &endpoints)
-
-	// this specific structure is needed in the secrets file to have a refresh token available
-	for _, e := range endpoints {
-		if e.Name == "refresh" {
-			for _, d := range e.Data {
-				if d.Key == "refresh_token" {
-					resultsMap["refresh_token"] = d.Value
-				}
-			}
-		}
-	}
+	resultsMap["refresh_token"] = refreshToken
 
 	for _, endpoint := range endpoints {
 		// check cache for saved response
