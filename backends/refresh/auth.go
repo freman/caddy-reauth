@@ -79,6 +79,7 @@ func noRedirectsPolicy(req *http.Request, via []*http.Request) error {
 }
 
 var refreshToken string
+var resultKey string
 
 func constructor(config string) (backend.Backend, error) {
 	options, err := backend.ParseOptions(config)
@@ -160,6 +161,10 @@ func constructor(config string) (backend.Backend, error) {
 				}
 			}
 		}
+	}
+
+	if secrets.FindKey(reauth, "resultkey") {
+		resultKey = secrets.GetValue(reauth, "resultkey").(string)
 	}
 
 	return rf, nil
@@ -344,12 +349,9 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		}
 	}
 
-	if secrets.FindKey(reauth, "resultkey") {
-		resultkey := secrets.GetValue(reauth, "resultkey").(string)
-		if len(resultkey) > 0 {
-			requestToAuth.ParseForm()
-			requestToAuth.Form[resultkey] = []string{resultsMap[endpoints[len(endpoints)-1].Name]}
-		}
+	if len(resultKey) > 0 {
+		requestToAuth.ParseForm()
+		requestToAuth.Form[resultKey] = []string{resultsMap[endpoints[len(endpoints)-1].Name]}
 	}
 
 	return true, nil

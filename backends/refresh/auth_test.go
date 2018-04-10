@@ -112,6 +112,8 @@ func TestAuthenticateSimple(t *testing.T) {
 		timeout:      DefaultTimeout,
 	}
 
+	constructor("url=http://google.com,timeout=5s,skipverify=true,follow=true,lifetime=1m")
+
 	t.Log("Testing no credentials")
 	r, _ := http.NewRequest("GET", "https://test.example.com", nil)
 	ok, err := rf.Authenticate(r)
