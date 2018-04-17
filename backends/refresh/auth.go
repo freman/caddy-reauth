@@ -28,8 +28,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
-	"gopkg.in/yaml.v2"
 	"io"
 	"net/http"
 	"net/url"
@@ -37,6 +35,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 
 	"github.com/allegro/bigcache"
 	"github.com/fellou89/caddy-reauth/backend"
@@ -47,15 +48,15 @@ import (
 const Backend = "refresh"
 
 // DefaultTimeout for sub requests
-const DefaultTimeout = time.Minute
-const DefaultLifeWindow = 3 * time.Hour
-const DefaultCleanWindow = time.Second
-const DefaultRespLimit = 1000
+const defaultTimeout = time.Minute
+const defaultLifeWindow = 3 * time.Hour
+const defaultCleanWindow = time.Second
+const defaultRespLimit = 1000
 
 // Refresh backend provides authentication against a refresh token endpoint.
 // If the refresh request returns a http 200 status code then the user is considered logged in.
 type Refresh struct {
-	refreshUrl         string
+	refreshURL         string
 	refreshCache       *bigcache.BigCache
 	timeout            time.Duration
 	insecureSkipVerify bool
@@ -66,7 +67,7 @@ type Refresh struct {
 
 var reauth yaml.MapSlice
 var reauthEndpoints []interface{}
-var endpoints []Endpoint
+var endpoints []endpoint
 
 func init() {
 	err := backend.Register(Backend, constructor)
@@ -98,83 +99,74 @@ func constructor(config string) (backend.Backend, error) {
 		return nil, errors.Wrap(err, "unable to parse url "+s)
 	}
 
-	life, err := parseDurationOption(options, "lifetime", DefaultLifeWindow)
+	cache, err := setupCache(options)
 	if err != nil {
 		return nil, err
 	}
 
-	clean, err := parseDurationOption(options, "cleaninterval", DefaultCleanWindow)
+	rf := &Refresh{
+		refreshURL:   u.String(),
+		refreshCache: cache,
+	}
+	if err = configureRefreshHandler(rf, options); err != nil {
+		return nil, err
+	}
+
+	if err = initSecretValues(); err != nil {
+		return nil, err
+	}
+	return rf, nil
+}
+
+func setupCache(options map[string]string) (*bigcache.BigCache, error) {
+
+	life, err := parseDurationOption(options, "lifetime", defaultLifeWindow)
+	if err != nil {
+		return nil, err
+	}
+
+	clean, err := parseDurationOption(options, "cleaninterval", defaultCleanWindow)
 	if err != nil {
 		return nil, err
 	}
 
 	cacheConfig := bigcache.DefaultConfig(life)
 	cacheConfig.CleanWindow = clean
-	cache, err := bigcache.NewBigCache(cacheConfig)
-	if err != nil {
-		return nil, err
-	}
 
-	rf := &Refresh{
-		refreshUrl:   u.String(),
-		refreshCache: cache,
-	}
+	return bigcache.NewBigCache(cacheConfig)
+}
 
-	val, err := parseDurationOption(options, "timeout", DefaultTimeout)
+func configureRefreshHandler(rf *Refresh, options map[string]string) error {
+	val, err := parseDurationOption(options, "timeout", defaultTimeout)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	rf.timeout = val
 
 	bval, err := parseBoolOption(options, "skipverify")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	rf.insecureSkipVerify = bval
 
 	bval, err = parseBoolOption(options, "follow")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	rf.followRedirects = bval
 
 	bval, err = parseBoolOption(options, "cookies")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	rf.passCookies = bval
 
-	ival, err := parseIntOption(options, "limit", DefaultRespLimit)
+	ival, err := parseIntOption(options, "limit", defaultRespLimit)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	rf.respLimit = ival
-
-	reauth = secrets.GetObject(secrets.SecretsMap, "reauth")
-	reauthEndpoints = secrets.GetArray(reauth, "endpoints")
-
-	endpointData, err := yaml.Marshal(reauthEndpoints)
-	if err != nil {
-		return nil, errors.New("Endpoints yaml not setup properly in secrets file")
-	}
-	yaml.Unmarshal(endpointData, &endpoints)
-
-	// this specific structure is needed in the secrets file to have a refresh token available
-	for _, e := range endpoints {
-		if e.Name == "refresh" {
-			for _, d := range e.Data {
-				if d.Key == "refresh_token" {
-					refreshToken = d.Value
-				}
-			}
-		}
-	}
-
-	if secrets.FindKey(reauth, "resultkey") {
-		resultKey = secrets.GetValue(reauth, "resultkey").(string)
-	}
-
-	return rf, nil
+	return nil
 }
 
 func parseIntOption(options map[string]string, key string, def int64) (int64, error) {
@@ -198,73 +190,147 @@ func parseDurationOption(options map[string]string, key string, def time.Duratio
 	return def, nil
 }
 
-func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Request, endpoint Endpoint, inputMap map[string]string) ([]byte, error) {
+func initSecretValues() error {
+	reauth = secrets.GetObject(secrets.SecretsMap, "reauth")
+	reauthEndpoints = secrets.GetArray(reauth, "endpoints")
+
+	endpointData, err := yaml.Marshal(reauthEndpoints)
+	if err != nil {
+		return errors.New("Endpoints yaml not setup properly in secrets file")
+	}
+	if err = yaml.Unmarshal(endpointData, &endpoints); err != nil {
+		return err
+	}
+
+	// this specific structure is needed in the secrets file to have a refresh token available
+	for _, e := range endpoints {
+		if e.Name == "refresh" {
+			for _, d := range e.Data {
+				if d.Key == "refresh_token" {
+					refreshToken = d.Value
+				}
+			}
+		}
+	}
+
+	if secrets.FindKey(reauth, "resultkey") {
+		resultKey = secrets.GetValue(reauth, "resultkey").(string)
+	}
+
+	return nil
+}
+
+func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Request, e endpoint, inputMap map[string]string) ([]byte, error) {
 	data := url.Values{}
-	for _, d := range endpoint.Data {
+	for _, d := range e.Data {
 		data.Set(d.Key, replaceInputs(d.Value, inputMap))
 	}
-
-	// In case endpoints at different urls need to be used,
-	// otherwise the url set in the refresh Caddyfile entry is used
-	url := h.refreshUrl
-	if endpoint.Url != "" {
-		url = endpoint.Url
-	}
-
-	var refreshTokenReq *http.Request
-	var err error
-
-	switch endpoint.Method {
-	case http.MethodPost:
-		refreshTokenReq, err = http.NewRequest(endpoint.Method, url+endpoint.Path, strings.NewReader(data.Encode()))
-	case http.MethodGet:
-		refreshTokenReq, err = http.NewRequest(endpoint.Method, url+endpoint.Path+"?"+data.Encode(), nil)
-	default:
-		err = fmt.Errorf("Endpoint '%s' had an unhandled method '%s'", endpoint.Name, endpoint.Method)
-	}
+	endpointReq, err := h.prepareRequest(c, requestToAuth, e, data, inputMap)
 	if err != nil {
 		return nil, err
 	}
 
-	if endpoint.Skipverify && refreshTokenReq.URL.Scheme == "https" && h.insecureSkipVerify {
+	if e.Skipverify && endpointReq.URL.Scheme == "https" && h.insecureSkipVerify {
 		c.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 	}
 
-	if endpoint.Cookies && h.passCookies {
-		for _, c := range requestToAuth.Cookies() {
-			refreshTokenReq.AddCookie(c)
-		}
-	}
-
-	for _, h := range endpoint.Headers {
-		refreshTokenReq.Header.Add(h.Key, replaceInputs(h.Value, inputMap))
-	}
-
-	refreshResp, err := c.Do(refreshTokenReq)
+	endpointResp, body, err := h.getEndpointResponse(c, endpointReq)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error on endpoint request")
-	}
-	defer refreshResp.Body.Close()
-	var body map[string]interface{}
-
-	dec := json.NewDecoder(io.LimitReader(refreshResp.Body, h.respLimit))
-	if err := dec.Decode(&body); err != nil {
 		return nil, err
 	}
 
+	return endpointResult(e, endpointReq, endpointResp, body)
+}
+
+var keyCheck = regexp.MustCompile(`{([-\w]+)}`)
+
+func replaceInputs(value string, inputMap map[string]string) string {
+	keyMatch := keyCheck.FindAllStringSubmatch(value, -1)
+	for _, m := range keyMatch {
+		value = strings.Replace(value, m[0], inputMap[m[1]], -1)
+	}
+	return value
+}
+
+func (h Refresh) prepareRequest(c *http.Client, requestToAuth *http.Request, e endpoint, data url.Values, inputMap map[string]string) (*http.Request, error) {
+	// In case endpoints at different urls need to be used,
+	// otherwise the url set in the refresh Caddyfile entry is used
+	url := h.refreshURL
+	if e.URL != "" {
+		url = e.URL
+	}
+
+	var req *http.Request
+	var err error
+
+	switch e.Method {
+	case http.MethodPost:
+		req, err = http.NewRequest(e.Method, url+e.Path, strings.NewReader(data.Encode()))
+	case http.MethodGet:
+		req, err = http.NewRequest(e.Method, url+e.Path+"?"+data.Encode(), nil)
+	default:
+		err = fmt.Errorf("Endpoint '%s' had an unhandled method '%s'", e.Name, e.Method)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if e.Cookies && h.passCookies {
+		for _, c := range requestToAuth.Cookies() {
+			req.AddCookie(c)
+		}
+	}
+
+	for _, h := range e.Headers {
+		req.Header.Add(h.Key, replaceInputs(h.Value, inputMap))
+	}
+
+	return req, nil
+}
+
+func (h Refresh) getEndpointResponse(c *http.Client, endpointReq *http.Request) (*http.Response, map[string]interface{}, error) {
+	endpointResp, err := c.Do(endpointReq)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Error on endpoint request")
+	}
+	defer endpointResp.Body.Close()
+
+	var body map[string]interface{}
+
+	dec := json.NewDecoder(io.LimitReader(endpointResp.Body, h.respLimit))
+	if err = dec.Decode(&body); err != nil {
+		return nil, nil, err
+	}
+	return endpointResp, body, nil
+}
+
+func endpointResult(e endpoint, endpointReq *http.Request, endpointResp *http.Response, body map[string]interface{}) ([]byte, error) {
 	responseBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error marshaling object into JSON")
 	}
 
-	for _, f := range endpoint.Failures {
-		failureString := url + endpoint.Path + ": " + f.Message
+	if err = handleEndpointFailures(e, endpointReq, endpointResp, body); err != nil {
+		return responseBody, err
+	}
+
+	if len(e.Responsekey) > 0 {
+		if body[e.Responsekey] != nil {
+			return []byte(body[e.Responsekey].(string)), nil
+		}
+	}
+	return responseBody, nil
+}
+
+func handleEndpointFailures(e endpoint, endpointReq *http.Request, endpointResp *http.Response, body map[string]interface{}) error {
+	for _, f := range e.Failures {
+		failureString := endpointReq.URL.String() + e.Path + ": " + f.Message
 		failed := false
 
 		if strings.EqualFold(f.Validation, "status") {
-			failed = strings.Contains(refreshResp.Status, f.Value)
+			failed = strings.Contains(endpointResp.Status, f.Value)
 
 		} else {
 			if f.Valuemessage && body[f.Key] != nil {
@@ -280,39 +346,22 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 		}
 
 		if failed {
-			return responseBody, errors.New(failureString)
+			return errors.New(failureString)
 		}
 	}
-
-	if len(endpoint.Responsekey) > 0 {
-		if body[endpoint.Responsekey] != nil {
-			return []byte(body[endpoint.Responsekey].(string)), nil
-		}
-	}
-	return responseBody, nil
+	return nil
 }
 
-var keyCheck = regexp.MustCompile(`{([-\w]+)}`)
-
-func replaceInputs(value string, inputMap map[string]string) string {
-	keyMatch := keyCheck.FindAllStringSubmatch(value, -1)
-	for _, m := range keyMatch {
-		value = strings.Replace(value, m[0], inputMap[m[1]], -1)
-	}
-	return value
-}
-
-// Authenticate fulfils the backend interface
-func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
+func (h Refresh) authProcessingSetup(requestToAuth *http.Request) (map[string]string, *http.Client, error) {
 	resultsMap := map[string]string{}
 
-	if client_auth, isa := secrets.GetValue(reauth, "client_authorization").(bool); isa && client_auth {
+	if clientAuth, isa := secrets.GetValue(reauth, "client_authorization").(bool); isa && clientAuth {
 		if requestToAuth.Header.Get("Authorization") == "" {
-			return failAuth(nil)
+			return nil, nil, errors.New("Missing bearer token from Authorization Header")
 		}
 		authHeader := strings.Split(requestToAuth.Header.Get("Authorization"), " ")
 		if len(authHeader) != 2 || authHeader[0] != "Bearer" {
-			return failAuth(errors.New("Authorization token not properly formatted"))
+			return nil, nil, errors.New("Authorization token not properly formatted")
 		}
 		resultsMap["client_token"] = authHeader[1]
 	}
@@ -324,13 +373,23 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 
 	resultsMap["refresh_token"] = refreshToken
 
-	for _, endpoint := range endpoints {
+	return resultsMap, c, nil
+}
+
+// Authenticate fulfils the backend interface
+func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
+	resultsMap, c, err := h.authProcessingSetup(requestToAuth)
+	if err != nil {
+		return failAuth(err)
+	}
+
+	for _, e := range endpoints {
 		// check cache for saved response
-		entry, err := h.refreshCache.Get(string(resultsMap[endpoint.Cachekey]))
+		entry, err := h.refreshCache.Get(string(resultsMap[e.Cachekey]))
 		if err != nil {
 			if _, isa := err.(*bigcache.EntryNotFoundError); isa {
 				// request data to put in cache when entry is not found
-				responseData, err := h.refreshRequestObject(c, requestToAuth, endpoint, resultsMap)
+				responseData, err := h.refreshRequestObject(c, requestToAuth, e, resultsMap)
 				if err != nil {
 					if responseData == nil {
 						// error and empty response signal an auth fail due to server error (500)
@@ -344,41 +403,46 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 
 				}
 				// nil error and response signal successful authentication
-				resultsMap[endpoint.Name] = string(responseData)
-				h.refreshCache.Set(resultsMap[endpoint.Cachekey], responseData)
+				resultsMap[e.Name] = string(responseData)
+				err = h.refreshCache.Set(resultsMap[e.Cachekey], responseData)
+				if err != nil {
+					return failAuth(err)
+				}
 			} else {
 				// error different than not found cache key cause server error (500)
 				return failAuth(err)
 			}
 		} else {
 			// value found in cache sets it directly to resultsMap
-			resultsMap[endpoint.Name] = string(entry)
+			resultsMap[e.Name] = string(entry)
 		}
 	}
 
 	if len(resultKey) > 0 {
-		requestToAuth.ParseForm()
+		if err = requestToAuth.ParseForm(); err != nil {
+			return failAuth(err)
+		}
 		requestToAuth.Form[resultKey] = []string{resultsMap[endpoints[len(endpoints)-1].Name]}
 	}
 
 	return true, nil
 }
 
-type Endpoint struct {
+type endpoint struct {
 	Name        string
-	Url         string
+	URL         string
 	Path        string
 	Method      string
-	Data        []DataObject
-	Headers     []DataObject
+	Data        []dataObject
+	Headers     []dataObject
 	Skipverify  bool
 	Cookies     bool
 	Cachekey    string
 	Responsekey string
-	Failures    []Failure
+	Failures    []failure
 }
 
-type Failure struct {
+type failure struct {
 	Validation   string
 	Key          string
 	Value        string
@@ -386,7 +450,7 @@ type Failure struct {
 	Valuemessage bool
 }
 
-type DataObject struct {
+type dataObject struct {
 	Key   string
 	Value string
 }

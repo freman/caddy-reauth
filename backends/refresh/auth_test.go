@@ -107,9 +107,9 @@ func TestAuthenticateSimple(t *testing.T) {
 
 	cache, _ := bigcache.NewBigCache(bigcache.DefaultConfig(time.Minute))
 	rf := &Refresh{
-		refreshUrl:   srv.URL,
+		refreshURL:   srv.URL,
 		refreshCache: cache,
-		timeout:      DefaultTimeout,
+		timeout:      defaultTimeout,
 	}
 
 	constructor("url=http://google.com,timeout=5s,skipverify=true,follow=true,lifetime=1m")
@@ -117,8 +117,8 @@ func TestAuthenticateSimple(t *testing.T) {
 	t.Log("Testing no credentials")
 	r, _ := http.NewRequest("GET", "https://test.example.com", nil)
 	ok, err := rf.Authenticate(r)
-	if err != nil {
-		t.Errorf("Unexpected error `%v`", err)
+	if err == nil {
+		t.Errorf("Expected an error, didn't get one")
 	}
 	if ok {
 		t.Error("Authenticate should have failed")
@@ -186,7 +186,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 		{ // 2
 			`URL only configuration`,
 			`url=http://google.com`,
-			&Refresh{refreshUrl: url, timeout: DefaultTimeout},
+			&Refresh{refreshURL: url, timeout: defaultTimeout},
 			nil,
 		},
 		{ // 3
@@ -198,7 +198,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 		{ // 4
 			`With valid arguments`,
 			`url=http://google.com,timeout=5s,skipverify=true,follow=true,lifetime=1m,cleaninterval=5s,limit=1000`,
-			&Refresh{refreshUrl: url, timeout: 5 * time.Second, insecureSkipVerify: true, followRedirects: true, refreshCache: refreshCache, respLimit: 1000},
+			&Refresh{refreshURL: url, timeout: 5 * time.Second, insecureSkipVerify: true, followRedirects: true, refreshCache: refreshCache, respLimit: 1000},
 			nil,
 		},
 		{ // 5
@@ -228,7 +228,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 		{ // 9
 			`With pass cookies`,
 			`url=http://google.com,cookies=true`,
-			&Refresh{refreshUrl: url, timeout: DefaultTimeout, passCookies: true},
+			&Refresh{refreshURL: url, timeout: defaultTimeout, passCookies: true},
 			nil,
 		},
 		{ // 10
@@ -278,7 +278,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 			actual, ok := be.(*Refresh)
 			if !ok {
 				t.Errorf("%d Expected *Refresh, got %T", i+1, be)
-			} else if tc.expect.refreshUrl == actual.refreshUrl &&
+			} else if tc.expect.refreshURL == actual.refreshURL &&
 				tc.expect.refreshCache == actual.refreshCache {
 				t.Errorf("%d Expected \n%+v got \n%+v", i+1, tc.expect, actual)
 			}
@@ -309,39 +309,39 @@ func TestRefreshRequestObject(t *testing.T) {
 	suri, _ := url.Parse(ssrv.URL)
 
 	refreshCache, _ := bigcache.NewBigCache(bigcache.DefaultConfig(time.Minute))
-	refresh := &Refresh{refreshUrl: uri.String(), timeout: 5 * time.Second, passCookies: true, insecureSkipVerify: true, followRedirects: true, refreshCache: refreshCache, respLimit: 1000}
+	refresh := &Refresh{refreshURL: uri.String(), timeout: 5 * time.Second, passCookies: true, insecureSkipVerify: true, followRedirects: true, refreshCache: refreshCache, respLimit: 1000}
 
 	c := &http.Client{Timeout: refresh.timeout}
 	r, _ := http.NewRequest("GET", "http://test.example.com", nil)
 
 	t.Log("Testing Endpoint with unhandled method")
-	_, err := refresh.refreshRequestObject(c, r, Endpoint{Method: "PUT"}, map[string]string{})
+	_, err := refresh.refreshRequestObject(c, r, endpoint{Method: "PUT"}, map[string]string{})
 	if err == nil {
 		t.Errorf("Expected error got none")
 	}
 
 	t.Log("Testing Endpoint with GET method")
-	_, err = refresh.refreshRequestObject(c, r, Endpoint{Method: "GET"}, map[string]string{})
+	_, err = refresh.refreshRequestObject(c, r, endpoint{Method: "GET"}, map[string]string{})
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
 	}
 
 	t.Log("Testing Endpoint url used when set")
-	refresh.refreshUrl = suri.String()
-	host, err := refresh.refreshRequestObject(c, r, Endpoint{Method: "GET", Url: uri.String() + "/return_host"}, map[string]string{})
+	refresh.refreshURL = suri.String()
+	host, err := refresh.refreshRequestObject(c, r, endpoint{Method: "GET", URL: uri.String() + "/return_host"}, map[string]string{})
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
 	}
 	if string(host) == uri.String() {
 		t.Errorf("Endpoint request did not use the uri host that was set")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing GET Endpoint had data encoded into query string")
-	refresh.refreshUrl += "/return_query"
-	query, err := refresh.refreshRequestObject(c, r, Endpoint{
+	refresh.refreshURL += "/return_query"
+	query, err := refresh.refreshRequestObject(c, r, endpoint{
 		Method: "GET",
-		Data:   []DataObject{DataObject{Key: "one", Value: "asdf"}, DataObject{Key: "two", Value: "fdsa"}},
+		Data:   []dataObject{dataObject{Key: "one", Value: "asdf"}, dataObject{Key: "two", Value: "fdsa"}},
 	}, map[string]string{})
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
@@ -349,19 +349,19 @@ func TestRefreshRequestObject(t *testing.T) {
 	if !strings.Contains(string(query), "one=asdf") || !strings.Contains(string(query), "two=fdsa") {
 		t.Errorf("Data was not properly encoded")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing Endpoint with POST method")
-	_, err = refresh.refreshRequestObject(c, r, Endpoint{Method: "POST"}, map[string]string{})
+	_, err = refresh.refreshRequestObject(c, r, endpoint{Method: "POST"}, map[string]string{})
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
 	}
 
 	t.Log("Testing POST Endpoint had data encoded into request form")
-	refresh.refreshUrl += "/return_form"
-	form, err := refresh.refreshRequestObject(c, r, Endpoint{
+	refresh.refreshURL += "/return_form"
+	form, err := refresh.refreshRequestObject(c, r, endpoint{
 		Method: "POST",
-		Data:   []DataObject{DataObject{Key: "one", Value: "asdf"}, DataObject{Key: "two", Value: "fdsa"}},
+		Data:   []dataObject{dataObject{Key: "one", Value: "asdf"}, dataObject{Key: "two", Value: "fdsa"}},
 	}, map[string]string{})
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
@@ -369,13 +369,13 @@ func TestRefreshRequestObject(t *testing.T) {
 	if !strings.Contains(string(query), "one=asdf") || !strings.Contains(string(query), "two=fdsa") {
 		t.Errorf("Data was not properly encoded")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing Endpoint data replaces references with input values")
-	refresh.refreshUrl += "/return_form"
-	form, err = refresh.refreshRequestObject(c, r, Endpoint{
+	refresh.refreshURL += "/return_form"
+	form, err = refresh.refreshRequestObject(c, r, endpoint{
 		Method: "POST",
-		Data:   []DataObject{DataObject{Key: "one", Value: "{asdf}___{fdsa}___asdf___{fdsa}"}},
+		Data:   []dataObject{dataObject{Key: "one", Value: "{asdf}___{fdsa}___asdf___{fdsa}"}},
 	}, map[string]string{"asdf": "replacement-value-for-asdf", "fdsa": "replacement-for-fdsa"})
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
@@ -383,74 +383,74 @@ func TestRefreshRequestObject(t *testing.T) {
 	if !strings.Contains(string(form), "one=replacement-value-for-asdf___replacement-for-fdsa___asdf___replacement-for-fdsa") {
 		t.Errorf("Data reference was not replaced")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing request client transport is modified for skipverify")
-	refresh.refreshUrl = suri.String()
-	refresh.refreshRequestObject(c, r, Endpoint{Method: "POST", Skipverify: true}, map[string]string{})
+	refresh.refreshURL = suri.String()
+	refresh.refreshRequestObject(c, r, endpoint{Method: "POST", Skipverify: true}, map[string]string{})
 	if c.Transport == nil {
 		t.Errorf("Client Transport was not set")
 	}
 
 	t.Log("Testing cookies are added to request if endpoint configured for it")
 	r.AddCookie(&http.Cookie{Name: "one", Value: "asdf"})
-	refresh.refreshUrl += "/return_cookies"
-	cookies, _ := refresh.refreshRequestObject(c, r, Endpoint{Method: "POST", Cookies: true}, map[string]string{})
+	refresh.refreshURL += "/return_cookies"
+	cookies, _ := refresh.refreshRequestObject(c, r, endpoint{Method: "POST", Cookies: true}, map[string]string{})
 	if !strings.Contains(string(cookies), "[one=asdf]") {
 		t.Errorf("Cookies were not added to the endpoint")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing headers are added to request if endpoint configured for it")
-	refresh.refreshUrl += "/return_headers"
-	headers, _ := refresh.refreshRequestObject(c, r, Endpoint{
+	refresh.refreshURL += "/return_headers"
+	headers, _ := refresh.refreshRequestObject(c, r, endpoint{
 		Method:  "POST",
-		Headers: []DataObject{DataObject{Key: "one", Value: "asdf"}, DataObject{Key: "two", Value: "fdsa"}},
+		Headers: []dataObject{dataObject{Key: "one", Value: "asdf"}, dataObject{Key: "two", Value: "fdsa"}},
 	}, map[string]string{})
 	if !strings.Contains(string(headers), "asdf") || !strings.Contains(string(headers), "fdsa") {
 		t.Errorf("Headers were not added to the endpoint")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing header values are replaced")
-	refresh.refreshUrl += "/return_headers"
-	headers, _ = refresh.refreshRequestObject(c, r, Endpoint{
+	refresh.refreshURL += "/return_headers"
+	headers, _ = refresh.refreshRequestObject(c, r, endpoint{
 		Method: "POST",
-		Headers: []DataObject{
-			DataObject{Key: "one", Value: "{asdf}"},
-			DataObject{Key: "two", Value: "{fdsa}"},
-			DataObject{Key: "three", Value: "{fdsa}"},
+		Headers: []dataObject{
+			dataObject{Key: "one", Value: "{asdf}"},
+			dataObject{Key: "two", Value: "{fdsa}"},
+			dataObject{Key: "three", Value: "{fdsa}"},
 		}}, map[string]string{"asdf": "replacement-value-for-asdf", "fdsa": "replacement-for-fdsa"})
 	if !strings.Contains(string(headers), "replacement-value-for-asdf") || !strings.Contains(string(headers), "replacement-for-fdsa") || strings.Contains(string(headers), "{fdsa}") {
 		t.Errorf("Headers were not added to the endpoint")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing client.Do error will pass error down")
-	refresh.refreshUrl = "error"
-	_, err = refresh.refreshRequestObject(c, r, Endpoint{Method: "POST"}, map[string]string{})
+	refresh.refreshURL = "error"
+	_, err = refresh.refreshRequestObject(c, r, endpoint{Method: "POST"}, map[string]string{})
 	if err == nil {
 		t.Errorf("Expected an error to come back from Do")
 	}
 	if !strings.Contains(err.Error(), "Error on endpoint request") {
 		t.Errorf("Expected error passed down should be from endpoint request")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing failure identified in response body by status")
-	refresh.refreshUrl += "/eof"
-	_, err = refresh.refreshRequestObject(c, r, Endpoint{Method: "POST"}, map[string]string{})
+	refresh.refreshURL += "/eof"
+	_, err = refresh.refreshRequestObject(c, r, endpoint{Method: "POST"}, map[string]string{})
 
 	if !strings.Contains(err.Error(), "EOF") {
 		t.Errorf("Expected EOF on an empty body")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing failure identified in response body by status")
-	refresh.refreshUrl += "/failure_status"
-	failure, err := refresh.refreshRequestObject(c, r, Endpoint{
+	refresh.refreshURL += "/failure_status"
+	failed, err := refresh.refreshRequestObject(c, r, endpoint{
 		Method: "POST",
-		Failures: []Failure{Failure{
+		Failures: []failure{failure{
 			Validation:   "status",
 			Key:          "",
 			Value:        "500",
@@ -458,19 +458,19 @@ func TestRefreshRequestObject(t *testing.T) {
 			Valuemessage: false,
 		}}}, map[string]string{})
 
-	if failure == nil {
-		t.Errorf("Expected response object to be returned when endpoint Failure is caugh")
+	if failed == nil {
+		t.Errorf("Expected response object to be returned when endpoint Failure is caught")
 	}
 	if !strings.Contains(err.Error(), "There was a 500") {
 		t.Errorf("Expected Failure message to be returned")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing failure identified in response body by body key presence")
-	refresh.refreshUrl += "/failure_presence"
-	failure, err = refresh.refreshRequestObject(c, r, Endpoint{
+	refresh.refreshURL += "/failure_presence"
+	failed, err = refresh.refreshRequestObject(c, r, endpoint{
 		Method: "POST",
-		Failures: []Failure{Failure{
+		Failures: []failure{failure{
 			Validation:   "presence",
 			Key:          "error",
 			Value:        "",
@@ -478,19 +478,19 @@ func TestRefreshRequestObject(t *testing.T) {
 			Valuemessage: false,
 		}}}, map[string]string{})
 
-	if failure == nil {
-		t.Errorf("Expected response object to be returned when endpoint Failure is caugh")
+	if failed == nil {
+		t.Errorf("Expected response object to be returned when endpoint Failure is caught")
 	}
 	if !strings.Contains(err.Error(), "There was an error") {
 		t.Errorf("Expected Failure message to be returned")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing presence failure adds response value to error message")
-	refresh.refreshUrl += "/failure_presence"
-	failure, err = refresh.refreshRequestObject(c, r, Endpoint{
+	refresh.refreshURL += "/failure_presence"
+	failed, err = refresh.refreshRequestObject(c, r, endpoint{
 		Method: "POST",
-		Failures: []Failure{Failure{
+		Failures: []failure{failure{
 			Validation:   "presence",
 			Key:          "error",
 			Value:        "",
@@ -501,13 +501,13 @@ func TestRefreshRequestObject(t *testing.T) {
 	if !strings.Contains(err.Error(), "something happened") {
 		t.Errorf("Expected error message to have body value")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing failure identified in response body by body key value equality")
-	refresh.refreshUrl += "/failure_equality"
-	failure, err = refresh.refreshRequestObject(c, r, Endpoint{
+	refresh.refreshURL += "/failure_equality"
+	failed, err = refresh.refreshRequestObject(c, r, endpoint{
 		Method: "POST",
-		Failures: []Failure{Failure{
+		Failures: []failure{failure{
 			Validation:   "equality",
 			Key:          "message",
 			Value:        "something happened",
@@ -515,19 +515,19 @@ func TestRefreshRequestObject(t *testing.T) {
 			Valuemessage: false,
 		}}}, map[string]string{})
 
-	if failure == nil {
-		t.Errorf("Expected response object to be returned when endpoint Failure is caugh")
+	if failed == nil {
+		t.Errorf("Expected response object to be returned when endpoint Failure is caught")
 	}
 	if !strings.Contains(err.Error(), "There was an error") {
 		t.Errorf("Expected Failure message to be returned")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing equality failure adds value to error message")
-	refresh.refreshUrl += "/failure_equality"
-	failure, err = refresh.refreshRequestObject(c, r, Endpoint{
+	refresh.refreshURL += "/failure_equality"
+	failed, err = refresh.refreshRequestObject(c, r, endpoint{
 		Method: "POST",
-		Failures: []Failure{Failure{
+		Failures: []failure{failure{
 			Validation:   "equality",
 			Key:          "message",
 			Value:        "something happened",
@@ -538,11 +538,11 @@ func TestRefreshRequestObject(t *testing.T) {
 	if !strings.Contains(err.Error(), "something happened") {
 		t.Errorf("Expected error message to have body value")
 	}
-	refresh.refreshUrl = uri.String()
+	refresh.refreshURL = uri.String()
 
 	t.Log("Testing response key found in response body")
-	refresh.refreshUrl += "/failure_equality"
-	message, err := refresh.refreshRequestObject(c, r, Endpoint{Method: "POST", Responsekey: "message"}, map[string]string{})
+	refresh.refreshURL += "/failure_equality"
+	message, err := refresh.refreshRequestObject(c, r, endpoint{Method: "POST", Responsekey: "message"}, map[string]string{})
 
 	if !strings.Contains(string(message), "something happened") {
 		t.Errorf("Value in response object was not found")
