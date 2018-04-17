@@ -92,6 +92,7 @@ Parameters for this backend:
 | timeout           | request timeout (optional 1m by default, go duration syntax is supported)                |
 | follow            | follow redirects (disabled by default as redirecting to a login page might cause a 200)  |
 | cookies           | true to pass cookies to the upstream server                                              |
+| limit             | int to set response size limit for endpoint requests (default 1000)                      |
 | lifetime          | time interval that a file cached by this module will remain valid (default 3 hours)      |
 | cleaninterval     | time interval to clean cache of expired entries (default 1 second)                       |
 
@@ -99,7 +100,7 @@ Examples
 
 - Caddyfile
 ```
-	refresh url=https://example.com,skipverify=true,timeout=5s,lifetime=3h,cleaninterval=1s
+	refresh url=https://example.com,skipverify=true,timeout=5s,lifetime=3h,cleaninterval=1s,limit=1000
 ```
 
 - Secrets file

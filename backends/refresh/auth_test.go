@@ -32,7 +32,7 @@ func init() {
 	token = "asdf"
 }
 
-func authTokenCheck(w http.ResponseWriter, r *http.Request) {
+func serverResponse(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 
 	if strings.Contains(r.URL.String(), "return_query") {
@@ -100,7 +100,7 @@ func TestAuthenticateSimple(t *testing.T) {
 		Value: reauth,
 	})
 
-	srv := httptest.NewServer(http.HandlerFunc(authTokenCheck))
+	srv := httptest.NewServer(http.HandlerFunc(serverResponse))
 	defer func() {
 		srv.Close()
 	}()
@@ -197,8 +197,8 @@ func TestAuthenticateConstructor(t *testing.T) {
 		},
 		{ // 4
 			`With valid arguments`,
-			`url=http://google.com,timeout=5s,skipverify=true,follow=true,lifetime=1m`,
-			&Refresh{refreshUrl: url, timeout: 5 * time.Second, insecureSkipVerify: true, followRedirects: true, refreshCache: refreshCache},
+			`url=http://google.com,timeout=5s,skipverify=true,follow=true,lifetime=1m,cleaninterval=5s,limit=1000`,
+			&Refresh{refreshUrl: url, timeout: 5 * time.Second, insecureSkipVerify: true, followRedirects: true, refreshCache: refreshCache, respLimit: 1000},
 			nil,
 		},
 		{ // 5
@@ -249,6 +249,12 @@ func TestAuthenticateConstructor(t *testing.T) {
 			nil,
 			errors.New(`time: unknown unit j in duration 5j`),
 		},
+		{ // 13
+			`With invalid response limit`,
+			`url=http://google.com,limit=5j`,
+			nil,
+			errors.New(`strconv.ParseInt: parsing "5j": invalid syntax`),
+		},
 	}
 
 	for i, tc := range tests {
@@ -293,8 +299,8 @@ func TestRefreshRequestObject(t *testing.T) {
 		Value: reauth,
 	})
 
-	ssrv := httptest.NewTLSServer(http.HandlerFunc(authTokenCheck))
-	srv := httptest.NewServer(http.HandlerFunc(authTokenCheck))
+	ssrv := httptest.NewTLSServer(http.HandlerFunc(serverResponse))
+	srv := httptest.NewServer(http.HandlerFunc(serverResponse))
 	defer func() {
 		ssrv.Close()
 		srv.Close()
@@ -303,7 +309,7 @@ func TestRefreshRequestObject(t *testing.T) {
 	suri, _ := url.Parse(ssrv.URL)
 
 	refreshCache, _ := bigcache.NewBigCache(bigcache.DefaultConfig(time.Minute))
-	refresh := &Refresh{refreshUrl: uri.String(), timeout: 5 * time.Second, passCookies: true, insecureSkipVerify: true, followRedirects: true, refreshCache: refreshCache}
+	refresh := &Refresh{refreshUrl: uri.String(), timeout: 5 * time.Second, passCookies: true, insecureSkipVerify: true, followRedirects: true, refreshCache: refreshCache, respLimit: 1000}
 
 	c := &http.Client{Timeout: refresh.timeout}
 	r, _ := http.NewRequest("GET", "http://test.example.com", nil)

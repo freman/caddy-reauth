@@ -27,10 +27,10 @@ package refresh
 import (
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -50,10 +50,10 @@ const Backend = "refresh"
 const DefaultTimeout = time.Minute
 const DefaultLifeWindow = 3 * time.Hour
 const DefaultCleanWindow = time.Second
+const DefaultRespLimit = 1000
 
 // Refresh backend provides authentication against a refresh token endpoint.
-// If the refresh request returns a http 200 status code then the user
-// is considered logged in.
+// If the refresh request returns a http 200 status code then the user is considered logged in.
 type Refresh struct {
 	refreshUrl         string
 	refreshCache       *bigcache.BigCache
@@ -61,6 +61,7 @@ type Refresh struct {
 	insecureSkipVerify bool
 	followRedirects    bool
 	passCookies        bool
+	respLimit          int64
 }
 
 var reauth yaml.MapSlice
@@ -143,6 +144,12 @@ func constructor(config string) (backend.Backend, error) {
 	}
 	rf.passCookies = bval
 
+	ival, err := parseIntOption(options, "limit", DefaultRespLimit)
+	if err != nil {
+		return nil, err
+	}
+	rf.respLimit = ival
+
 	reauth = secrets.GetObject(secrets.SecretsMap, "reauth")
 	reauthEndpoints = secrets.GetArray(reauth, "endpoints")
 
@@ -170,6 +177,13 @@ func constructor(config string) (backend.Backend, error) {
 	return rf, nil
 }
 
+func parseIntOption(options map[string]string, key string, def int64) (int64, error) {
+	if s, found := options[key]; found {
+		return strconv.ParseInt(s, 10, 64)
+	}
+	return def, nil
+}
+
 func parseBoolOption(options map[string]string, key string) (bool, error) {
 	if s, found := options[key]; found {
 		return strconv.ParseBool(s)
@@ -192,24 +206,21 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 
 	// In case endpoints at different urls need to be used,
 	// otherwise the url set in the refresh Caddyfile entry is used
-	var url string
-	if len(endpoint.Url) == 0 {
-		url = h.refreshUrl
-	} else {
+	url := h.refreshUrl
+	if endpoint.Url != "" {
 		url = endpoint.Url
 	}
 
 	var refreshTokenReq *http.Request
 	var err error
 
-	if endpoint.Method == "POST" {
+	switch endpoint.Method {
+	case http.MethodPost:
 		refreshTokenReq, err = http.NewRequest(endpoint.Method, url+endpoint.Path, strings.NewReader(data.Encode()))
-
-	} else if endpoint.Method == "GET" {
+	case http.MethodGet:
 		refreshTokenReq, err = http.NewRequest(endpoint.Method, url+endpoint.Path+"?"+data.Encode(), nil)
-
-	} else {
-		return nil, errors.New("Endpoint had an unhandled method")
+	default:
+		err = fmt.Errorf("Endpoint '%s' had an unhandled method '%s'", endpoint.Name, endpoint.Method)
 	}
 	if err != nil {
 		return nil, err
@@ -236,11 +247,9 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 		return nil, errors.Wrap(err, "Error on endpoint request")
 	}
 	defer refreshResp.Body.Close()
-
 	var body map[string]interface{}
-	const limit = 1000000 // Sensible limit that covers the maximum possible size of a real response plus some leeway
 
-	dec := json.NewDecoder(io.LimitReader(refreshResp.Body, limit))
+	dec := json.NewDecoder(io.LimitReader(refreshResp.Body, h.respLimit))
 	if err := dec.Decode(&body); err != nil {
 		return nil, err
 	}
@@ -283,12 +292,12 @@ func (h Refresh) refreshRequestObject(c *http.Client, requestToAuth *http.Reques
 	return responseBody, nil
 }
 
-var keyCheck = regexp.MustCompile(`({[[:alnum:]+\-*_*]+})`)
+var keyCheck = regexp.MustCompile(`{([-\w]+)}`)
 
 func replaceInputs(value string, inputMap map[string]string) string {
 	keyMatch := keyCheck.FindAllStringSubmatch(value, -1)
 	for _, m := range keyMatch {
-		value = strings.Replace(value, m[0], inputMap[m[1][1:len(m[1])-1]], -1)
+		value = strings.Replace(value, m[0], inputMap[m[1]], -1)
 	}
 	return value
 }
@@ -297,8 +306,8 @@ func replaceInputs(value string, inputMap map[string]string) string {
 func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	resultsMap := map[string]string{}
 
-	if secrets.GetValue(reauth, "client_authorization").(bool) {
-		if len(requestToAuth.Header.Get("Authorization")) == 0 {
+	if client_auth, isa := secrets.GetValue(reauth, "client_authorization").(bool); isa && client_auth {
+		if requestToAuth.Header.Get("Authorization") == "" {
 			return failAuth(nil)
 		}
 		authHeader := strings.Split(requestToAuth.Header.Get("Authorization"), " ")
@@ -319,7 +328,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		// check cache for saved response
 		entry, err := h.refreshCache.Get(string(resultsMap[endpoint.Cachekey]))
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
+			if _, isa := err.(*bigcache.EntryNotFoundError); isa {
 				// request data to put in cache when entry is not found
 				responseData, err := h.refreshRequestObject(c, requestToAuth, endpoint, resultsMap)
 				if err != nil {
@@ -327,18 +336,16 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 						// error and empty response signal an auth fail due to server error (500)
 						return failAuth(err)
 
-					} else {
-						// error and response signal an auth fail due to unauthorized response from server
-						// Authorize returns false and no error, so that caddyfile configured response is given
-						failAuth(err)
-						return false, nil
 					}
+					// error and response signal an auth fail due to unauthorized response from server
+					// Authorize returns false and no error, so that caddyfile configured response is given
+					failAuth(err)
+					return false, nil
 
-				} else {
-					// nil error and response signal successful authentication
-					resultsMap[endpoint.Name] = string(responseData)
-					h.refreshCache.Set(resultsMap[endpoint.Cachekey], responseData)
 				}
+				// nil error and response signal successful authentication
+				resultsMap[endpoint.Name] = string(responseData)
+				h.refreshCache.Set(resultsMap[endpoint.Cachekey], responseData)
 			} else {
 				// error different than not found cache key cause server error (500)
 				return failAuth(err)
@@ -386,7 +393,7 @@ type DataObject struct {
 
 func failAuth(err error) (bool, error) {
 	if err != nil {
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 	}
 	return false, err
 }
