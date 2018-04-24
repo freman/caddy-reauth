@@ -34,7 +34,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/freman/caddy-reauth/backend"
+	"github.com/petrus-v/caddy-reauth/backend"
 
 	ldp "gopkg.in/ldap.v2"
 )
