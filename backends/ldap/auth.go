@@ -34,7 +34,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/freman/caddy-reauth/backend"
+	"github.com/petrus-v/caddy-reauth/backend"
 
 	ldp "gopkg.in/ldap.v2"
 )
@@ -56,6 +56,7 @@ const DefaultFilter = "(&(objectClass=user)(sAMAccountName=%s))"
 type LDAP struct {
 	Host               string        `json:"host"`
 	Port               int           `json:"port"`
+	SimpleTLS          bool          `json:"simpleTls"`
 	TLS                bool          `json:"tls"`
 	Timeout            time.Duration `json:"timeout"`
 	InsecureSkipVerify bool          `json:"insecure"`
@@ -194,18 +195,27 @@ func (h *LDAP) Close() error {
 
 func (h *LDAP) connect() error {
 	hostport := fmt.Sprintf("%s:%d", h.Host, h.Port)
-	l, err := ldp.Dial("tcp", hostport)
-	if err != nil {
-		return fmt.Errorf("connect to %q: %v", hostport, err)
-	}
-	if h.TLS {
-		if err = l.StartTLS(&tls.Config{InsecureSkipVerify: h.InsecureSkipVerify}); err != nil {
-			l.Close()
-			return fmt.Errorf("StartTLS: %v", err)
+	var l *ldp.Conn
+	var err error
+	if h.SimpleTLS {
+		l, err = ldp.DialTLS("tcp", hostport, &tls.Config{InsecureSkipVerify: h.InsecureSkipVerify})
+		if err != nil {
+			return fmt.Errorf("connect to %q: %v", hostport, err)
+		}
+	} else {
+		l, err = ldp.Dial("tcp", hostport)
+		if err != nil {
+			return fmt.Errorf("connect to %q: %v", hostport, err)
+		}
+		if h.TLS {
+			if err = l.StartTLS(&tls.Config{InsecureSkipVerify: h.InsecureSkipVerify}); err != nil {
+				l.Close()
+				return fmt.Errorf("StartTLS: %v", err)
+			}
 		}
 	}
 	// First bind with a read only user
-	if err = l.Bind(h.BindUsername, h.BindPassword); err != nil {
+	if err := l.Bind(h.BindUsername, h.BindPassword); err != nil {
 		l.Close()
 		return fmt.Errorf("bind with %q: %v", h.BindUsername, err)
 	}

@@ -34,7 +34,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/freman/caddy-reauth/backend"
+	"github.com/petrus-v/caddy-reauth/backend"
 )
 
 // Backend name

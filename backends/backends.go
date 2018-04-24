@@ -25,10 +25,10 @@
 package backends
 
 import (
-	_ "github.com/freman/caddy-reauth/backends/gitlabci"
-	_ "github.com/freman/caddy-reauth/backends/ldap"
-	_ "github.com/freman/caddy-reauth/backends/simple"
-	_ "github.com/freman/caddy-reauth/backends/upstream"
+	_ "github.com/petrus-v/caddy-reauth/backends/gitlabci"
+	_ "github.com/petrus-v/caddy-reauth/backends/ldap"
+	_ "github.com/petrus-v/caddy-reauth/backends/simple"
+	_ "github.com/petrus-v/caddy-reauth/backends/upstream"
 )
 
 // This page intentionally left blank ;)
