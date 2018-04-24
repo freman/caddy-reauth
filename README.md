@@ -110,17 +110,18 @@ Parameters for this backend are JSON-encoded!
 | ------------------|------------------------------------------------------------------------------------------|
 | host              | host, required - i.e. ldap.example.com |
 | port              | port, optional (default 389)           |
+| simpleTls         | ldap over SSL (``ldaps://``) (default false), if ``true`` ``tls`` option is ignored |
 | tls               | should StartTLS be used? (default false) |
 | bindUsername      | (read-only) bind username - i.e. ldap-auth |
 | bindPassword      | the password for the bind username         |
-| skipverify        | true to ignore TLS errors (optional, false by default)                                   |
+| insecure          | true to ignore TLS errors (optional, false by default), used with ``simpleTls`` or ``tls``|
 | timeout           | request timeout (optional 1m by default, go duration syntax is supported)                |
 | base              | Search base, for example "OU=Users,OU=Company,DC=example,DC=com"                         |
 | filter            | Filter the users, for example "(&(memberOf=CN=group,OU=Users,OU=Company,DC=example,DC=com)(objectClass=user)(sAMAccountName=%s))"                                                   |
 
 Example
 ```
-	ldap {"url":"ldap://ldap-auth:passw@ldap.example.com:389","timeout":"5s","skipverify":true,"base":"OU=Users,OU=Company,DC=example,DC=com","filter":"(&(memberOf=CN=group,OU=Users,OU=Company,DC=example,DC=com)(objectClass=user)(sAMAccountName=%s))"}
+	ldap {"host":"ldap.example.com","port":389,"timeout":"5s","insecure":true,"base":"OU=Users,OU=Company,DC=example,DC=com","filter":"(&(memberOf=CN=group,OU=Users,OU=Company,DC=example,DC=com)(objectClass=user)(sAMAccountName=%s))"}
 ```
 
 ## Failure handlers
