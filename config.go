@@ -27,8 +27,8 @@ package reauth
 import (
 	"fmt"
 
-	"github.com/freman/caddy-reauth/backend"
-	_ "github.com/freman/caddy-reauth/backends"
+	"github.com/fellou89/caddy-reauth/backend"
+	_ "github.com/fellou89/caddy-reauth/backends"
 
 	"github.com/mholt/caddy"
 )
