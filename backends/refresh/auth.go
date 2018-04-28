@@ -355,9 +355,12 @@ func handleEndpointFailures(e endpoint, endpointReq *http.Request, endpointResp 
 func (h Refresh) authProcessingSetup(requestToAuth *http.Request) (map[string]string, *http.Client, error) {
 	resultsMap := map[string]string{}
 
-	if clientAuth, isa := secrets.GetValue(reauth, "client_authorization").(bool); isa && clientAuth {
+	if clientAuth, isa := secrets.GetValue(reauth, "client_authorization").(int); isa && clientAuth > 0 {
 		if requestToAuth.Header.Get("Authorization") == "" {
-			return nil, nil, errors.New("Missing bearer token from Authorization Header")
+			if clientAuth == 2 {
+				return nil, nil, errors.New("Missing bearer token from Authorization Header")
+			}
+			return nil, nil, nil
 		}
 		authHeader := strings.Split(requestToAuth.Header.Get("Authorization"), " ")
 		if len(authHeader) != 2 || authHeader[0] != "Bearer" {
@@ -379,7 +382,7 @@ func (h Refresh) authProcessingSetup(requestToAuth *http.Request) (map[string]st
 // Authenticate fulfils the backend interface
 func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 	resultsMap, c, err := h.authProcessingSetup(requestToAuth)
-	if err != nil {
+	if err != nil || resultsMap == nil {
 		return failAuth(err)
 	}
 

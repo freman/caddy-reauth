@@ -106,7 +106,7 @@ Examples
 - Secrets file
 ```
 reauth:
-  authorization: true                                 # authorization bool (required) - whether to check for Authorization header,
+  client_authorization: 1                             # authorization flag (required) - 0/1 whether to check for Authorization header, 2 will throw 500 if missing
                                                           Authorization access token stored in 'ResultsMap' under 'client_token' key
   endpoints                                           # endpoints array (required)
     - name: refresh                                   # endpoint of name 'refresh' (required)
