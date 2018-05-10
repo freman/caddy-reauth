@@ -90,16 +90,6 @@ func serverResponse(w http.ResponseWriter, r *http.Request) {
 func TestAuthenticateSimple(t *testing.T) {
 	fmt.Printf("\n-----TestAuthenticateSimple-----\n")
 
-	reauth := yaml.MapSlice{}
-	reauth = append(reauth, yaml.MapItem{
-		Key:   "client_authorization",
-		Value: true,
-	})
-	secrets.SecretsMap = append(secrets.SecretsMap, yaml.MapItem{
-		Key:   "reauth",
-		Value: reauth,
-	})
-
 	srv := httptest.NewServer(http.HandlerFunc(serverResponse))
 	defer func() {
 		srv.Close()
@@ -112,11 +102,38 @@ func TestAuthenticateSimple(t *testing.T) {
 		timeout:      defaultTimeout,
 	}
 
+	reauth1 := yaml.MapSlice{}
+	reauth1 = append(reauth1, yaml.MapItem{
+		Key:   "client_authorization",
+		Value: 1,
+	})
+	secrets.SecretsMap = append(secrets.SecretsMap, yaml.MapItem{
+		Key:   "reauth",
+		Value: reauth1,
+	})
 	constructor("url=http://google.com,timeout=5s,skipverify=true,follow=true,lifetime=1m")
 
-	t.Log("Testing no credentials")
+	t.Log("Testing no credentials with client_authorization 1 value")
 	r, _ := http.NewRequest("GET", "https://test.example.com", nil)
 	ok, err := rf.Authenticate(r)
+	if err != nil {
+		t.Errorf("Unexpected error")
+	}
+	if ok {
+		t.Error("Authenticate should have failed")
+	}
+
+	reauth2 := yaml.MapSlice{}
+	reauth2 = append(reauth2, yaml.MapItem{
+		Key:   "client_authorization",
+		Value: 2,
+	})
+	secrets.SecretsMap[0] = yaml.MapItem{Key: "reauth", Value: reauth2}
+	constructor("url=http://google.com,timeout=5s,skipverify=true,follow=true,lifetime=1m")
+
+	t.Log("Testing no credentials with client_authorization 2 value")
+	r, _ = http.NewRequest("GET", "https://test.example.com", nil)
+	ok, err = rf.Authenticate(r)
 	if err == nil {
 		t.Errorf("Expected an error, didn't get one")
 	}
@@ -161,7 +178,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 	reauth := yaml.MapSlice{}
 	reauth = append(reauth, yaml.MapItem{
 		Key:   "client_authorization",
-		Value: true,
+		Value: 2,
 	})
 	secrets.SecretsMap = append(secrets.SecretsMap, yaml.MapItem{
 		Key:   "reauth",
@@ -292,7 +309,7 @@ func TestRefreshRequestObject(t *testing.T) {
 	reauth := yaml.MapSlice{}
 	reauth = append(reauth, yaml.MapItem{
 		Key:   "client_authorization",
-		Value: true,
+		Value: 2,
 	})
 	secrets.SecretsMap = append(secrets.SecretsMap, yaml.MapItem{
 		Key:   "reauth",
@@ -359,7 +376,7 @@ func TestRefreshRequestObject(t *testing.T) {
 
 	t.Log("Testing POST Endpoint had data encoded into request form")
 	refresh.refreshURL += "/return_form"
-	form, err := refresh.refreshRequestObject(c, r, endpoint{
+	_, err = refresh.refreshRequestObject(c, r, endpoint{
 		Method: "POST",
 		Data:   []dataObject{dataObject{Key: "one", Value: "asdf"}, dataObject{Key: "two", Value: "fdsa"}},
 	}, map[string]string{})
@@ -373,7 +390,7 @@ func TestRefreshRequestObject(t *testing.T) {
 
 	t.Log("Testing Endpoint data replaces references with input values")
 	refresh.refreshURL += "/return_form"
-	form, err = refresh.refreshRequestObject(c, r, endpoint{
+	form, err := refresh.refreshRequestObject(c, r, endpoint{
 		Method: "POST",
 		Data:   []dataObject{dataObject{Key: "one", Value: "{asdf}___{fdsa}___asdf___{fdsa}"}},
 	}, map[string]string{"asdf": "replacement-value-for-asdf", "fdsa": "replacement-for-fdsa"})
