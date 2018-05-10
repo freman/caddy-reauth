@@ -125,9 +125,7 @@ func (h GitlabCI) Authenticate(r *http.Request) (bool, error) {
 		return false, nil
 	}
 
-	if !strings.HasSuffix(un, ".git") {
-		un += ".git"
-	}
+	un += ".git/info/refs?service=git-upload-pack"
 
 	repo, err := h.url.Parse(un)
 	if err != nil {
