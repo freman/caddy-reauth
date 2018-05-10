@@ -40,7 +40,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/allegro/bigcache"
-	"github.com/fellou89/caddy-reauth/backend"
+	"github.com/freman/caddy-reauth/backend"
 	"github.com/startsmartlabs/caddy-secrets"
 )
 

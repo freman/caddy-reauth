@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fellou89/caddy-reauth/backend"
+	"github.com/freman/caddy-reauth/backend"
 )
 
 type failure interface {

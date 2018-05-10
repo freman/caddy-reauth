@@ -177,7 +177,7 @@ Parameters for this backend:
 
 Example
 ```
-	gitlab url=https://gitlab.example.com,skipverify=true,timeout=5s
+	gitlabci url=https://gitlab.example.com,skipverify=true,timeout=5s
 ```
 
 Example of logging in via gitlab-ci.yml
@@ -223,7 +223,7 @@ Parameters for this handler:
 
 Example
 ```
-	failure httpbasic realm=example.org
+	failure  basicauth realm=example.org
 ```
 
 ### Redirect
