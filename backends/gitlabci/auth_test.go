@@ -9,12 +9,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
 
 func simplePasswordCheck(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/group/project.git" {
+	if !strings.HasPrefix(r.URL.Path, "/group/project.git") {
 		http.NotFound(w, r)
 		return
 	}
