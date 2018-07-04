@@ -56,6 +56,7 @@ const DefaultFilter = "(&(objectClass=user)(sAMAccountName=%s))"
 type LDAP struct {
 	Host               string        `json:"host"`
 	Port               int           `json:"port"`
+	Ldaps              *bool         `json:"ldaps"`
 	TLS                bool          `json:"tls"`
 	Timeout            time.Duration `json:"timeout"`
 	InsecureSkipVerify bool          `json:"insecure"`
@@ -182,6 +183,7 @@ func (h *LDAP) Authenticate(r *http.Request) (bool, error) {
 	return true, nil
 }
 
+// Close the LDAP connection
 func (h *LDAP) Close() error {
 	h.mu.Lock()
 	if h.conn != nil {
@@ -194,18 +196,34 @@ func (h *LDAP) Close() error {
 
 func (h *LDAP) connect() error {
 	hostport := fmt.Sprintf("%s:%d", h.Host, h.Port)
-	l, err := ldp.Dial("tcp", hostport)
+
+	// Automatically use ldaps for 636 or 3269 unless told otherwise
+	ldaps := h.Port == 636 || h.Port == 3269
+	if h.Ldaps != nil {
+		ldaps = *h.Ldaps
+	}
+
+	var l *ldp.Conn
+	var err error
+	if ldaps {
+		l, err = ldp.DialTLS("tcp", hostport, &tls.Config{InsecureSkipVerify: h.InsecureSkipVerify})
+	} else {
+		l, err = ldp.Dial("tcp", hostport)
+	}
 	if err != nil {
 		return fmt.Errorf("connect to %q: %v", hostport, err)
 	}
+
+	// Technically it's not impossible to run tls over ssl... just excessive
 	if h.TLS {
 		if err = l.StartTLS(&tls.Config{InsecureSkipVerify: h.InsecureSkipVerify}); err != nil {
 			l.Close()
 			return fmt.Errorf("StartTLS: %v", err)
 		}
 	}
+
 	// First bind with a read only user
-	if err = l.Bind(h.BindUsername, h.BindPassword); err != nil {
+	if err := l.Bind(h.BindUsername, h.BindPassword); err != nil {
 		l.Close()
 		return fmt.Errorf("bind with %q: %v", h.BindUsername, err)
 	}
