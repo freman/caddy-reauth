@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -58,14 +59,37 @@ func Lookup(name string) (Constructor, error) {
 }
 
 func ParseOptions(config string) (map[string]string, error) {
-	opts := map[string]string{}
 	pairs := strings.Split(config, ",")
+
+	opts := map[string]string{}
+
+	var inset bool
+	var prev string
 	for _, p := range pairs {
+		if inset {
+			opts[prev] += "," + p
+			inset = !strings.HasSuffix(p, `"`)
+			continue
+		}
+
 		pair := strings.SplitN(p, "=", 2)
 		if len(pair) != 2 {
-			return nil, fmt.Errorf("backend configuration has to be in form 'key1=value1,key2=..', but was %v", p)
+			if prev == "" {
+				fmt.Println("err")
+			}
+			opts[prev] += "," + pair[0]
+			continue
 		}
-		opts[pair[0]] = pair[1]
+		prev = pair[0]
+		inset = strings.HasPrefix(pair[1], `"`) && !strings.HasSuffix(p, `"`)
+		opts[prev] = pair[1]
 	}
+
+	for n, v := range opts {
+		if v, err := strconv.Unquote(v); err == nil {
+			opts[n] = v
+		}
+	}
+
 	return opts, nil
 }
