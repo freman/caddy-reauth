@@ -202,7 +202,6 @@ Parameters for this backend:
 | timeout          | request timeout (optional 1m by default, go duration syntax is supported)                                                |
 | base             | Search base, for example "OU=Users,OU=Company,DC=example,DC=com"                                                         |
 | filter           | Filter the users, eg "(&(memberOf=CN=group,OU=Users,OU=Company,DC=example,DC=com)(objectClass=user)(sAMAccountName=%s))" |
-| insecure         | true to ignore TLS errors (optional, false by default)                                                                   |
 | principal_suffix | suffix to append to usernames (eg: @example.com)                                                                         |
 | pool_size        | size of the connection pool, default is 10                                                                               |
 
