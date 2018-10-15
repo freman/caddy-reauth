@@ -41,7 +41,7 @@ import (
 
 	"github.com/allegro/bigcache"
 	"github.com/freman/caddy-reauth/backend"
-	"github.com/startsmartlabs/caddy-secrets"
+	secrets "github.com/gilgameshskytrooper/caddy-secrets"
 )
 
 // Backend name
