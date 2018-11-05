@@ -177,8 +177,12 @@ func (h *LDAP) Authenticate(r *http.Request) (bool, error) {
 		return false, fmt.Errorf("search under %q for %q: %v", h.baseDN, fmt.Sprintf(h.filterDN, un+h.principalSuffix), err)
 	}
 
-	if len(sr.Entries) != 1 {
-		return false, fmt.Errorf("user does not exist or too many entries returned")
+	if len(sr.Entries) == 0 {
+		return false, nil // user does not exist
+	}
+
+	if len(sr.Entries) > 1 {
+		return false, fmt.Errorf("too many entries returned")
 	}
 
 	userDN := sr.Entries[0].DN
@@ -186,6 +190,9 @@ func (h *LDAP) Authenticate(r *http.Request) (bool, error) {
 	// Bind as the user to verify their password
 	err = l.Bind(userDN, pw)
 	if err != nil {
+		if ldp.IsErrorWithCode(err, ldp.LDAPResultInvalidCredentials) {
+			return false, nil
+		}
 		return false, fmt.Errorf("bind with %q: %v", userDN, err)
 	}
 
