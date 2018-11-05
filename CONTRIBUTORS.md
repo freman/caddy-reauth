@@ -9,3 +9,7 @@ reauth contributors (sorted alphabetically)
 * **[Tamás Gulácsi](https://github.com/tgulacsi)**
 
   * LDAP authentication backend
+
+* ** [SMLX](https://github.com/smlx)**
+
+  * LDAP authentication backend fixes
