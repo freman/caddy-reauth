@@ -27,7 +27,6 @@ package simple
 import (
 	"net/http"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/freman/caddy-reauth/backend"
 )
 
@@ -47,7 +46,6 @@ func init() {
 }
 
 func constructor(config string) (backend.Backend, error) {
-	spew.Dump(config)
 	options, err := backend.ParseOptions(config)
 	if err != nil {
 		return nil, err

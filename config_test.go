@@ -116,7 +116,7 @@ func TestCaddyReauthConfigs(t *testing.T) {
 				simple username
 			}`,
 			nil,
-			errors.New(`backend configuration has to be in form 'key1=value1,key2=..', but was username for simple (Testfile:3)`),
+			errors.New(`Unable to parse options string, missing pair for simple (Testfile:3)`),
 		}, {
 			`Single exceptions are good`,
 			`reauth {
