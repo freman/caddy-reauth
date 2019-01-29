@@ -26,7 +26,6 @@ package backend
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -75,7 +74,7 @@ func ParseOptions(config string) (map[string]string, error) {
 		pair := strings.SplitN(p, "=", 2)
 		if len(pair) != 2 {
 			if prev == "" {
-				fmt.Println("err")
+				return nil, errors.New("Unable to parse options string, missing pair")
 			}
 			opts[prev] += "," + pair[0]
 			continue

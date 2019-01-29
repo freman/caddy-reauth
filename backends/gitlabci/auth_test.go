@@ -119,7 +119,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 			`Empty configuration`,
 			``,
 			nil,
-			errors.New(`backend configuration has to be in form 'key1=value1,key2=..', but was `),
+			errors.New(`Unable to parse options string, missing pair`),
 		}, {
 			`URL only configuration`,
 			`url=http://google.com`,

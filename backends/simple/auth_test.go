@@ -52,7 +52,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 			`Empty configuration`,
 			``,
 			nil,
-			errors.New(`backend configuration has to be in form 'key1=value1,key2=..', but was `),
+			errors.New(`Unable to parse options string, missing pair`),
 		}, {
 			`Test correct usage`,
 			`username=password`,
@@ -67,7 +67,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 			`Test bad configuration`,
 			`username`,
 			nil,
-			errors.New(`backend configuration has to be in form 'key1=value1,key2=..', but was username`),
+			errors.New(`Unable to parse options string, missing pair`),
 		},
 	}
 
@@ -93,7 +93,7 @@ func TestAuthenticateConstructor(t *testing.T) {
 			if !ok {
 				t.Errorf("Expected *Simple, got %T", be)
 			} else if !reflect.DeepEqual(tc.expect, actual) {
-				t.Errorf("Expected %v got %v", tc.expect, actual)
+				t.Errorf("Expected %#v got %#v", tc.expect, actual)
 			}
 		}
 	}
