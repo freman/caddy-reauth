@@ -390,7 +390,7 @@ func (h Refresh) Authenticate(requestToAuth *http.Request) (bool, error) {
 		// check cache for saved response
 		entry, err := h.refreshCache.Get(string(resultsMap[e.Cachekey]))
 		if err != nil {
-			if _, isa := err.(*bigcache.EntryNotFoundError); isa {
+			if err == bigcache.ErrEntryNotFound {
 				// request data to put in cache when entry is not found
 				responseData, err := h.refreshRequestObject(c, requestToAuth, e, resultsMap)
 				if err != nil {
