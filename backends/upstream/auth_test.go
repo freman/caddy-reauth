@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"regexp"
 	"testing"
 	"time"
 )
@@ -50,6 +51,21 @@ func simpleCookieCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if c == nil || c.Value != "trustme" {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+}
+
+func cookieRedirectCheck(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/" {
+		c, err := r.Cookie("test")
+		if err != nil {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		if c == nil || c.Value != "trustme" {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
 		return
 	}
 }
@@ -174,6 +190,52 @@ func TestAuthenticateCookie(t *testing.T) {
 		url:         uri,
 		timeout:     DefaultTimeout,
 		passCookies: true,
+	}
+
+	t.Log("Testing no credentials")
+	r, _ := http.NewRequest("GET", "https://test.example.com", nil)
+	ok, err := us.Authenticate(r)
+	if err != nil {
+		t.Errorf("Unexpected error `%v`", err)
+	}
+	if ok {
+		t.Error("Authenticate should have failed")
+	}
+
+	t.Log("Testing wrong credentials")
+	r.AddCookie(&http.Cookie{Name: "test", Value: "trustnoone"})
+	ok, err = us.Authenticate(r)
+	if err != nil {
+		t.Errorf("Unexpected error `%v`", err)
+	}
+	if ok {
+		t.Error("Authenticate should have failed")
+	}
+
+	t.Log("Testing correct credentials")
+	r, _ = http.NewRequest("GET", "https://test.example.com", nil)
+	r.AddCookie(&http.Cookie{Name: "test", Value: "trustme"})
+	ok, err = us.Authenticate(r)
+	if err != nil {
+		t.Errorf("Unexpected error `%v`", err)
+	}
+	if !ok {
+		t.Error("Authenticate should have succeeded")
+	}
+}
+
+func TestAuthenticateCookieRedirect(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(cookieRedirectCheck))
+	defer srv.Close()
+
+	uri, _ := url.Parse(srv.URL)
+
+	us := Upstream{
+		url:             uri,
+		timeout:         DefaultTimeout,
+		followRedirects: true,
+		passCookies:     true,
+		match:           regexp.MustCompile("login"),
 	}
 
 	t.Log("Testing no credentials")

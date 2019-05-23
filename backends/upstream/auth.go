@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -51,6 +52,7 @@ type Upstream struct {
 	insecureSkipVerify bool
 	followRedirects    bool
 	passCookies        bool
+	match              *regexp.Regexp
 }
 
 func init() {
@@ -117,6 +119,13 @@ func constructor(config string) (backend.Backend, error) {
 		us.passCookies = b
 	}
 
+	if s, found := options["match"]; found {
+		us.match, err = regexp.Compile(s)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse match expression %s: %v", s, err)
+		}
+	}
+
 	return us, nil
 }
 
@@ -162,6 +171,10 @@ func (h Upstream) Authenticate(r *http.Request) (bool, error) {
 	}
 
 	if resp.StatusCode != 200 {
+		return false, nil
+	}
+
+	if h.match != nil && h.match.MatchString(resp.Request.URL.String()) {
 		return false, nil
 	}
 

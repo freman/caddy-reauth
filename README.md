@@ -72,10 +72,12 @@ Parameters for this backend:
 | timeout           | request timeout (optional 1m by default, go duration syntax is supported)                |
 | follow            | follow redirects (disabled by default as redirecting to a login page might cause a 200)  |
 | cookies           | true to pass cookies to the upstream server                                              |
+| match             | used with follow, match string against the redirect url, if found then not logged in     |
 
-Example
+Examples
 ```
 	upstream url=https://google.com,skipverify=true,timeout=5s
+  upstream url=https://google.com,skipverify=true,timeout=5s,follow=true,match=login
 ```
 
 ### Refresh
