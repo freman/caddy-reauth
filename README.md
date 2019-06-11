@@ -70,7 +70,7 @@ Along with these two arguments you are required to specify at least one backend.
 
 ### Spaces in configuration
 
-Through experimentation by @mh720 (Mike Holloway) it has been discovered that if you need spaces in your configuration that the best
+Through experimentation by [@mh720 (Mike Holloway)](https://github.com/mh720) it has been discovered that if you need spaces in your configuration that the best
 bet is to use unicode escaping.
 
 For example:
