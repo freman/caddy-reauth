@@ -2,6 +2,26 @@
 
 Another authentication plugin for CaddyServer
 
+## Contents
+
+- [reauth](#reauth)
+  * [Abstract](#abstract)
+  * [Supported backends](#supported-backends)
+  * [Supported failure handlers](#supported-failure-handlers)
+  * [Configuration](#configuration)
+    + [Spaces in configuration](#spaces-in-configuration)
+  * [Backends](#backends)
+    + [Simple](#simple)
+    + [Upstream](#upstream)
+    + [Refresh](#refresh)
+    + [GitlabCI](#gitlabci)
+    + [LDAP](#ldap)
+  * [Failure handlers](#failure-handlers)
+    + [HTTPBasic](#httpbasic)
+    + [Redirect](#redirect)
+    + [Status](#status)
+  * [Todo](#todo)
+
 ## Abstract
 
 Provides a common basis for various and multiple authentication systems. This came to be as we wanted to dynamically authenticate our
@@ -47,6 +67,18 @@ Example:
 ```
 
 Along with these two arguments you are required to specify at least one backend.
+
+### Spaces in configuration
+
+Through experimentation by @mh720 (Mike Holloway) it has been discovered that if you need spaces in your configuration that the best
+bet is to use unicode escaping.
+
+For example:
+```
+OU=GROUP\u0020NAME
+```
+
+I imagine this would allow you to escape any character you need this way including quotes.
 
 ## Backends
 
