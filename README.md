@@ -21,6 +21,7 @@ Another authentication plugin for CaddyServer
     + [Redirect](#redirect)
     + [Status](#status)
   * [Todo](#todo)
+  * [Other notes](#other-notes)
 
 ## Abstract
 

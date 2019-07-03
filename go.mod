@@ -2,10 +2,11 @@ module github.com/freman/caddy-reauth
 
 go 1.12
 
+replace github.com/go-resty/resty => gopkg.in/resty.v1 v1.12.0
+
 require (
 	github.com/allegro/bigcache v1.2.1
 	github.com/caddyserver/caddy v1.0.1
-	github.com/davecgh/go-spew v1.1.1
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/hashicorp/go-getter v1.3.0
 	github.com/pkg/errors v0.8.1
