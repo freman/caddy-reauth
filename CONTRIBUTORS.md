@@ -10,6 +10,10 @@ reauth contributors (sorted alphabetically)
 
   * LDAP authentication backend
 
-* ** [SMLX](https://github.com/smlx)**
+* **[SMLX](https://github.com/smlx)**
 
   * LDAP authentication backend fixes
+
+* **[Andrew Lee](https://github.com/gilgameshskytrooper)**
+
+  * Archival of caddy-secrets to save my butt

@@ -13,7 +13,7 @@ import (
 
 	"github.com/allegro/bigcache"
 	"github.com/dgrijalva/jwt-go"
-	secrets "github.com/gilgameshskytrooper/caddy-secrets"
+	secrets "github.com/freman/caddy-reauth/lib/caddy-secrets"
 	"gopkg.in/yaml.v2"
 )
 

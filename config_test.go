@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/freman/caddy-reauth/backend"
 	"github.com/caddyserver/caddy"
+	"github.com/freman/caddy-reauth/backend"
 )
 
 func TestCaddyReauthConfigs(t *testing.T) {

@@ -300,3 +300,7 @@ Example
 ## Todo
 
 Modularise the failure handlers...
+
+## Other notes
+
+* Have embedded [https://github.com/startsmartlabs/caddy-secrets](https://github.com/startsmartlabs/caddy-secrets) in [lib/caddy-secrets](lib/caddy-secrets) for easier maintenance.
