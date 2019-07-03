@@ -30,7 +30,7 @@ import (
 	"github.com/freman/caddy-reauth/backend"
 	_ "github.com/freman/caddy-reauth/backends"
 
-	"github.com/mholt/caddy"
+	"github.com/caddyserver/caddy"
 )
 
 type Rule struct {
