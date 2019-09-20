@@ -2,7 +2,10 @@ module github.com/freman/caddy-reauth
 
 go 1.12
 
-replace github.com/go-resty/resty => gopkg.in/resty.v1 v1.12.0
+replace (
+	git.apache.org/thrift.git => github.com/apache/thrift v0.0.0-20180902110319-2566ecd5d999
+	github.com/go-resty/resty => gopkg.in/resty.v1 v1.12.0
+)
 
 require (
 	cloud.google.com/go/storage v1.0.0 // indirect
