@@ -239,7 +239,7 @@ Parameters for this backend:
 | filter           | Filter the users, eg "(&(memberOf=CN=group,OU=Users,OU=Company,DC=example,DC=com)(objectClass=user)(sAMAccountName=%s))" |
 | principal_suffix | suffix to append to usernames (eg: @example.com)                                                                         |
 | pool_size        | size of the connection pool, default is 10                                                                               |
-| authenticated    | true to force password be filled even server allow UNAUTHENTICATED login                                                 |
+| authenticated    | true don't allow login with empty passwords (optional, false by default)                                                 |
 
 Example
 ```

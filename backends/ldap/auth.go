@@ -147,12 +147,9 @@ func constructor(config string) (backend.Backend, error) {
 	}
 
 	if s, found := options["authenticated"]; found {
-		if s == "true" {
-			us.authenticated = true
-		} else if s == "false" {
-			us.authenticated = false
-		} else {
-			return nil, fmt.Errorf("unable to parse authenticated %s: authenticated must be true or false", s)
+		us.authenticated, err = strconv.ParseBool(s)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse authenticated %q: %v", s, err)
 		}
 	}
 
