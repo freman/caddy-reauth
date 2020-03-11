@@ -64,6 +64,7 @@ type LDAP struct {
 	insecureSkipVerify bool
 	timeout            time.Duration
 	pool               chan ldp.Client
+	authenticated      bool
 }
 
 func init() {
@@ -145,6 +146,16 @@ func constructor(config string) (backend.Backend, error) {
 		}
 	}
 
+	if s, found := options["authenticated"]; found {
+		if s == "true" {
+			us.authenticated = true
+		} else if s == "false" {
+			us.authenticated = false
+		} else {
+			return nil, fmt.Errorf("unable to parse authenticated %s: authenticated must be true or false", s)
+		}
+	}
+
 	us.pool = make(chan ldp.Client, poolSize)
 
 	return us, nil
@@ -183,6 +194,10 @@ func (h *LDAP) Authenticate(r *http.Request) (bool, error) {
 
 	if len(sr.Entries) > 1 {
 		return false, fmt.Errorf("too many entries returned")
+	}
+
+	if h.authenticated && pw == "" {
+		return false, nil
 	}
 
 	userDN := sr.Entries[0].DN
