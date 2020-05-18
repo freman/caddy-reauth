@@ -1,6 +1,8 @@
 # reauth
 
-Another authentication plugin for CaddyServer
+Another authentication plugin for CaddyServer (v1)
+
+For CaddyServer V2 Please [caddy2-reauth](https://github.com/freman/caddy2-reauth)
 
 ## Contents
 
